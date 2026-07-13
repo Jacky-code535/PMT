@@ -23,7 +23,7 @@ ssh -L 3000:127.0.0.1:3000 \
   root@10.239.173.80 -p 2522
 ```
 
-然后在**自己电脑的浏览器**打开上述 URL。Dashboard 当前包含 13 个面板，覆盖采集健康、PMT series 数、样本新鲜度、Core 温度、usage、频率/温度/电压 histogram、throttle 和 data loss，并且每 20 秒自动刷新。
+然后在**自己电脑的浏览器**打开上述 URL。Dashboard 当前有 7 个分区、34 个可视化面板，并用 5 个全局变量覆盖关键指标和全部 4387 个 metric；页面每 20 秒自动刷新。
 
 相关内容：
 
@@ -1733,29 +1733,42 @@ dashboard 文件：
 /var/lib/grafana/dashboards/pmt-backend-test/pmt-real-redfish.json
 ```
 
+仓库中可移植、可版本控制的 dashboard 和生成器：
+
+```text
+tools/otel/dashboards/pmt-redfish-comprehensive.json
+tools/otel/generate_pmt_dashboard.py
+```
+
 Grafana provisioning 文件：
 
 ```text
 /etc/grafana/provisioning/dashboards/pmt-backend-test.yml
 ```
 
-当前 dashboard 包含 13 个面板：
+当前 dashboard 有 41 个 JSON panel entries，其中 7 个是分区标题、34 个是实际可视化面板：
 
-| 面板 | 作用 |
+| 分区 | 主要内容 |
 |---|---|
-| Collector scrape status | `up{job="otel-pmt"}`，确认 Prometheus 能抓取 Collector |
-| Current PMT series | 当前带 avc01 标签的 PMT series 数，正常约 27126 |
-| Prometheus PMT scrape age | 最近 Prometheus PMT scrape 样本年龄；不单独代表 BMC 内容更新时间 |
-| Maximum core temperature | 所有 core 当前最高温度，80°C/95°C 设置黄/红阈值 |
-| New data-loss cycles (5m) | 最近 5 分钟 data-loss counter 总增量，非零显示红色 |
-| Prometheus scrape duration | Prometheus 抓取 `:8889` 所需时间 |
-| Top 20 core temperatures | 所有已解码 core 中最高的 20 条温度曲线 |
-| Top core usage change rates | accumulated usage counter 的 5 分钟 rate |
-| Core 0 frequency histogram rate | Core 0 各频率 bucket 的 5 分钟 rate |
-| Core 0 temperature histogram rate | Core 0 各温度 bucket 的 5 分钟 rate |
-| Core 0 voltage histogram rate | Core 0 各电压 bucket 的 5 分钟 rate |
-| Top core throttle counters | 64-cycle throttle counter 最高的 12 条 |
-| Data-loss increase by source | 按 DeviceId/AccessId 显示最近 5 分钟新增 data loss |
+| Fleet health / 采集总览 | Collector、series 数、metric 名称数、scrape age、最高温度、data loss、scrape duration |
+| Thermal / 全 Core 热状态 | 当前最热 32 cores、Top 20 历史、最高/平均/最低热包络、选定 core 温度 |
+| Core activity & throttling | Core usage 变化率、选定 core usage、64/1024-cycle throttle |
+| Selected Core histograms | 任意 core 的频率、温度和电压 bucket 驻留变化率 |
+| Memory, CHA & accelerator | RDT MBM local/total、RDT CMT、CHA enable、QAT bandwidth 和 latency |
+| Inventory & collection quality | PMT source 拓扑、data-loss count/timestamp、core enable 和新增 data loss |
+| Metric Explorer | 从 4387 个名称中搜索任意 metric，查看历史、当前 labels、`rate()` 和 `delta()` |
+
+顶部有 5 个全局变量：
+
+| 变量 | 作用 |
+|---|---|
+| Endpoint | 选择 BMC/Redfish endpoint |
+| Device | 单选、多选或查看所有 DeviceId |
+| Access | 单选、多选或查看所有 AccessId |
+| Core | 在温度、usage 和三个 histogram 面板中选择 core 0–127 |
+| Metric (search all) | 搜索并绘制任意一个 PMT metric |
+
+关键指标使用专用图表和正确单位；不适合同时绘制的数千条长尾 metrics 由 Metric Explorer 完整覆盖。这样既全面，又避免一次渲染 27126 条 series 造成浏览器卡顿。
 
 dashboard 配置为：
 
@@ -1765,7 +1778,7 @@ dashboard 配置为：
 
 因此浏览器打开 dashboard 时，每 20 秒重新查询 Prometheus。底层 PMT receiver 同时每 20 秒采集一次，Prometheus 每 15 秒 scrape 一次。三层都在持续运行。
 
-13 个 PromQL 已通过脚本逐条向 Prometheus 查询验证，每个面板均返回成功。注意：dashboard 自动刷新不能替代底层采集；判断 BMC 周期是否持续执行还应查看：
+当前 38 个 PromQL targets 已逐条向 Prometheus 实测，全部查询成功；Dashboard 也已在 Grafana 浏览器中完成渲染检查。注意：dashboard 自动刷新不能替代底层采集；判断 BMC 周期是否持续执行还应查看：
 
 ```bash
 journalctl -u otelcol-pmt -f \
@@ -2073,21 +2086,16 @@ grep -RniE '22491753|22806802' \
   | head -n 50
 ```
 
-### 19.2 建立更完整的 PMT dashboard
+### 19.2 Dashboard 已完成全面重构，下一步是告警和业务语义
 
-当前 dashboard 已经验证了真实温度和基础状态。后续可以增加：
+当前 Dashboard 已覆盖全 Core 温度、usage、三个 histogram、两种 throttle 窗口、RDT MBM/CMT、CHA、QAT、data-loss、设备拓扑和全部 metric explorer。下一步不应继续无差别堆图，而应：
 
-- CPU package temperature；
-- 每个 core 的温度；
-- frequency histogram；
-- temperature histogram；
-- voltage histogram；
-- PVP throttle；
-- data loss count；
-- data loss timestamp；
-- 最近一次成功采集时间；
-- BMC endpoint 可用性；
-- 每个设备/AccessId 的筛选变量。
+- 和平台 owner 确认温度、latency、throttle 和 data-loss 的生产阈值；
+- 为关键状态建立 Grafana/Prometheus alert rules；
+- 补齐未映射 aggregator 后再加入新 metric family；
+- 为 BMC trigger/GET 成功率增加 Collector 自监控 metric；
+- 根据业务场景保存不同 dashboard view，例如 thermal、memory、failure triage；
+- 为大规模多 BMC 部署评估 recording rules，降低 Top-K 和动态正则查询成本。
 
 ### 19.3 设置 Grafana 默认密码和权限
 
