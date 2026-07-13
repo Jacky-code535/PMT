@@ -233,5 +233,5 @@ providers:
   - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.40.0
 
 # If you want to use a local version of the intelpmtreceiver, uncomment the following lines and adjust the path
-# replaces:
-  # - github.com/intel/Intel-PMT/tools/otel/intelpmtreceiver => ../intelpmtreceiver
+replaces:
+  - github.com/intel/Intel-PMT/tools/otel/intelpmtreceiver => ../intelpmtreceiver

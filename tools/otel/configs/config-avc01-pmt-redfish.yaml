@@ -1,0 +1,37 @@
+# Redfish PMT configuration for avc01.
+# Set BMC_AUTHORIZATION to the complete value "Basic <base64-user-colon-password>".
+# Do not commit credentials or place them directly in this file.
+receivers:
+  intelpmtreceiver:
+    interval: 20s
+    metadata: "/root/projects/Intel-PMT/xml/pmt.xml"
+    mode: redfish
+    endpoints:
+      avc01:
+        endpoint: "https://avc01-bmc.sh.intel.com/redfish/v1/Systems/system/LogServices/PMT/Entries/0/PMTTelemetrySnapshot.json"
+        trigger_action: "https://avc01-bmc.sh.intel.com/redfish/v1/Systems/system/LogServices/PMT/Actions/LogService.CollectDiagnosticData"
+        trigger_param: '{"DiagnosticDataType":"OEM","OEMDiagnosticDataType":"TelemetrySnapshot"}'
+        headers:
+          Authorization: "${env:BMC_AUTHORIZATION}"
+        tls:
+          insecure_skip_verify: true
+  otlp:
+    protocols:
+      http:
+        endpoint: "127.0.0.1:4318"
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+  debug:
+    verbosity: basic
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [intelpmtreceiver, otlp]
+      processors: [batch]
+      exporters: [debug, prometheus]
