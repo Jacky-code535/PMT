@@ -270,33 +270,34 @@ add_timeseries("Data-loss positive delta by source", "最近五分钟新增 data
 ], unit="locale", minimum=0)
 advance(10)
 
-row("07 · FIVR telemetry availability / FIVR 数据可用性", "本区只回答 FIVR telemetry 是否可解释，不把未公开含义的两位码或固件 poison 误报为硬件故障。")
+row("07 · FIVR evidence and limits / FIVR 实测结果与解析边界", "不是解析器故障：精确 XML 已定位三个 64-bit words，并按每 2 bits 拆分。限制在于 Intel-PMT metadata 没有提供 index→rail 和 code 0/1/2/3→含义的映射。")
 fivr_available = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available",{sel}}}'
 fivr_nonzero = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count",{sel}}}'
-add_stat("C-Die data usable", "1=所选 C-Die monitor words 均可解码；0=至少一个 word 不可用。这里只表示数据质量，不是健康结论。", 0, 6,
-         f'min({{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22806802",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}})',
-         thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}], color_mode="background")
-add_stat("IO-Die data usable", "0=当前 payload 是固件 poison，因此 IO-Die FIVR 状态未知；不能解释为硬件故障。", 6, 6,
-         f'min({{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22491753",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}})',
-         thresholds=[{"color": "yellow", "value": None}, {"color": "green", "value": 1}], color_mode="background")
-add_stat("Unavailable data words", "被固件标为不可用的 monitor word 数；该数字衡量数据缺口，不衡量硬件故障。", 12, 6,
-         f'count({fivr_available}) - sum({fivr_available})', unit="locale",
-         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 1}], color_mode="background")
-add_stat("Engineering codes (non-zero)", "仅统计可用数据中的非零两位码。平台未提供码义映射，因此不能据此宣告 PASS/FAIL。", 18, 6,
+c_fivr_raw = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]",PMTGuid="0x22806802",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}}'
+io_fivr_available = f'{{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22491753",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}}'
+add_stat("C-Die words exactly 0x0", "实测 C-Die 三组 packed words 中等于 0x0000000000000000 的比例；当前 Redfish 与 in-band 均为 100%。", 0, 8,
+         f'100 * count({c_fivr_raw} == 0) / count({c_fivr_raw})', unit="percent",
+         thresholds=[{"color": "yellow", "value": None}, {"color": "green", "value": 100}], color_mode="background")
+add_stat("C-Die non-zero 2-bit slots", "按 XML 的每 2 bits 拆分后，所有非零 slot 的总数。当前为 0；但公开 metadata 未明确写出 code 0 的文字含义。", 8, 8,
          f'sum({fivr_nonzero})', unit="locale",
          thresholds=[{"color": "blue", "value": None}], color_mode="background")
+add_stat("IO-Die words = DEADBEEF", "IO-Die 三组 words 中识别为 0xDEADBEEFDEADBEEF sentinel 的比例。100% 表示 payload 未提供状态，不表示 FIVR 故障。", 16, 8,
+         f'100 * count({io_fivr_available} == 0) / count({io_fivr_available})', unit="percent",
+         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 1}], color_mode="background")
 advance(4)
 
-add_bar_gauge("Data availability by die and source", "按 die/source 汇总：1=该组全部 monitor words 可用；0=该组存在固件 poison。", 0, 12, 9,
+add_bar_gauge("Packed-word availability by die and source", "按 die/source 汇总：1=存在真实 packed word；0=三个位置返回 DEADBEEF sentinel。", 0, 12, 10,
               f'min by(PMTGuid,DeviceId,AccessId,CollectionMode) ({fivr_available})', "{{CollectionMode}} · {{PMTGuid}} · D{{DeviceId}}/A{{AccessId}}", "short", 0, 1,
               [{"color": "red", "value": None}, {"color": "green", "value": 1}])
-add_text("How to read this section / 如何解读", """### Safe customer interpretation
+add_text("What is decoded—and what is missing / 已解析内容与缺失定义", """### Verified on avc01
 
-- **Usable = 1**: telemetry can be decoded; this alone does not prove FIVR health.
-- **Usable = 0**: telemetry is unavailable/poisoned; report **status unknown**, not hardware failure.
-- **Engineering codes**: values are retained for engineering follow-up, but no PASS/FAIL meaning is assigned without the platform code specification.
-- Exact schema matching remains enforced internally; raw GUID/code details are intentionally not used as primary customer labels.""", 12, 12, 9)
-advance(9)
+- **C-Die:** all three 64-bit monitor words are `0x0` on every exposed instance, through both Redfish and in-band PMT.
+- **IO-Die:** all three locations are `0xDEADBEEFDEADBEEF` on every instance, through both paths. This is an unavailable/debug sentinel, not 32 meaningful status values.
+- **XML proves:** each word contains **2 bits per FIVR**.
+- **XML does not provide:** which rail each slot represents, or what codes `0/1/2/3` mean. The same omission exists in production, preproduction, generated JSON, and upstream history.
+
+Therefore C-Die can be reported as **“all published packed fields are zero”** and IO-Die as **“status unavailable”**. A named Healthy/Warning/Fault result requires the internal GNR PUNIT/FIVR register codebook or corrected Intel metadata.""", 12, 12, 10)
+advance(10)
 
 row("08 · Metric Explorer / 全量搜索", "在顶部 Metric 中输入名称片段即可搜索全部 PMT metrics。查询使用 __name__ selector，避免动态 metric 名拼接失败。")
 explorer_selector = f'{{__name__="$metric",{sel}}}'
@@ -363,7 +364,7 @@ dashboard = {
     "templating": {"list": variables}, "time": {"from": "now-30m", "to": "now"},
     "timepicker": {"refresh_intervals": ["5s", "10s", "20s", "30s", "1m", "5m"],
                    "time_options": ["5m", "15m", "30m", "1h", "6h", "12h", "24h", "7d"]},
-    "timezone": "browser", "title": "Intel PMT · BMC + In-band Telemetry", "uid": "pmt-avc01-redfish", "version": 16,
+    "timezone": "browser", "title": "Intel PMT · BMC + In-band Telemetry", "uid": "pmt-avc01-redfish", "version": 17,
 }
 
 serialized = json.dumps(dashboard, indent=2, ensure_ascii=False) + "\n"

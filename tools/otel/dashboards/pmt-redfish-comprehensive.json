@@ -2350,8 +2350,8 @@
     {
       "id": 38,
       "type": "row",
-      "title": "07 · FIVR telemetry availability / FIVR 数据可用性",
-      "description": "本区只回答 FIVR telemetry 是否可解释，不把未公开含义的两位码或固件 poison 误报为硬件故障。",
+      "title": "07 · FIVR evidence and limits / FIVR 实测结果与解析边界",
+      "description": "不是解析器故障：精确 XML 已定位三个 64-bit words，并按每 2 bits 拆分。限制在于 Intel-PMT metadata 没有提供 index→rail 和 code 0/1/2/3→含义的映射。",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2364,15 +2364,15 @@
     {
       "id": 39,
       "type": "stat",
-      "title": "C-Die data usable",
-      "description": "1=所选 C-Die monitor words 均可解码；0=至少一个 word 不可用。这里只表示数据质量，不是健康结论。",
+      "title": "C-Die words exactly 0x0",
+      "description": "实测 C-Die 三组 packed words 中等于 0x0000000000000000 的比例；当前 Redfish 与 in-band 均为 100%。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
+        "w": 8,
         "x": 0,
         "y": 109
       },
@@ -2381,17 +2381,17 @@
           "color": {
             "mode": "thresholds"
           },
-          "unit": "short",
+          "unit": "percent",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "yellow",
                 "value": null
               },
               {
                 "color": "green",
-                "value": 1
+                "value": 100
               }
             ]
           }
@@ -2414,7 +2414,7 @@
       },
       "targets": [
         {
-          "expr": "min({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22806802\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "100 * count({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]\",PMTGuid=\"0x22806802\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"} == 0) / count({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]\",PMTGuid=\"0x22806802\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
           "legendFormat": "",
           "refId": "A"
         }
@@ -2423,134 +2423,16 @@
     {
       "id": 40,
       "type": "stat",
-      "title": "IO-Die data usable",
-      "description": "0=当前 payload 是固件 poison，因此 IO-Die FIVR 状态未知；不能解释为硬件故障。",
+      "title": "C-Die non-zero 2-bit slots",
+      "description": "按 XML 的每 2 bits 拆分后，所有非零 slot 的总数。当前为 0；但公开 metadata 未明确写出 code 0 的文字含义。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
         "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 109
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "unit": "short",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "yellow",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "min({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22491753\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 41,
-      "type": "stat",
-      "title": "Unavailable data words",
-      "description": "被固件标为不可用的 monitor word 数；该数字衡量数据缺口，不衡量硬件故障。",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 109
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "unit": "locale",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "count({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}) - sum({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 42,
-      "type": "stat",
-      "title": "Engineering codes (non-zero)",
-      "description": "仅统计可用数据中的非零两位码。平台未提供码义映射，因此不能据此宣告 PASS/FAIL。",
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
+        "w": 8,
+        "x": 8,
         "y": 109
       },
       "fieldConfig": {
@@ -2594,16 +2476,75 @@
       ]
     },
     {
-      "id": 43,
-      "type": "bargauge",
-      "title": "Data availability by die and source",
-      "description": "按 die/source 汇总：1=该组全部 monitor words 可用；0=该组存在固件 poison。",
+      "id": 41,
+      "type": "stat",
+      "title": "IO-Die words = DEADBEEF",
+      "description": "IO-Die 三组 words 中识别为 0xDEADBEEFDEADBEEF sentinel 的比例。100% 表示 payload 未提供状态，不表示 FIVR 故障。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
-        "h": 9,
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "100 * count({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22491753\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"} == 0) / count({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22491753\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "bargauge",
+      "title": "Packed-word availability by die and source",
+      "description": "按 die/source 汇总：1=存在真实 packed word；0=三个位置返回 DEADBEEF sentinel。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
         "w": 12,
         "x": 0,
         "y": 113
@@ -2661,27 +2602,27 @@
       ]
     },
     {
-      "id": 44,
+      "id": 43,
       "type": "text",
-      "title": "How to read this section / 如何解读",
+      "title": "What is decoded—and what is missing / 已解析内容与缺失定义",
       "description": "",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
       "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 12,
         "x": 12,
         "y": 113
       },
       "options": {
-        "content": "### Safe customer interpretation\n\n- **Usable = 1**: telemetry can be decoded; this alone does not prove FIVR health.\n- **Usable = 0**: telemetry is unavailable/poisoned; report **status unknown**, not hardware failure.\n- **Engineering codes**: values are retained for engineering follow-up, but no PASS/FAIL meaning is assigned without the platform code specification.\n- Exact schema matching remains enforced internally; raw GUID/code details are intentionally not used as primary customer labels.",
+        "content": "### Verified on avc01\n\n- **C-Die:** all three 64-bit monitor words are `0x0` on every exposed instance, through both Redfish and in-band PMT.\n- **IO-Die:** all three locations are `0xDEADBEEFDEADBEEF` on every instance, through both paths. This is an unavailable/debug sentinel, not 32 meaningful status values.\n- **XML proves:** each word contains **2 bits per FIVR**.\n- **XML does not provide:** which rail each slot represents, or what codes `0/1/2/3` mean. The same omission exists in production, preproduction, generated JSON, and upstream history.\n\nTherefore C-Die can be reported as **“all published packed fields are zero”** and IO-Die as **“status unavailable”**. A named Healthy/Warning/Fault result requires the internal GNR PUNIT/FIVR register codebook or corrected Intel metadata.",
         "mode": "markdown"
       }
     },
     {
-      "id": 45,
+      "id": 44,
       "type": "row",
       "title": "08 · Metric Explorer / 全量搜索",
       "description": "在顶部 Metric 中输入名称片段即可搜索全部 PMT metrics。查询使用 __name__ selector，避免动态 metric 名拼接失败。",
@@ -2690,12 +2631,12 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 122
+        "y": 123
       },
       "panels": []
     },
     {
-      "id": 46,
+      "id": 45,
       "type": "timeseries",
       "title": "$metric · raw history",
       "description": "原始历史值。请先在 metric catalog 确认 TYPE、HELP 和单位；counter 与 gauge 的解释方式不同。",
@@ -2707,7 +2648,7 @@
         "h": 11,
         "w": 16,
         "x": 0,
-        "y": 123
+        "y": 124
       },
       "fieldConfig": {
         "defaults": {
@@ -2761,7 +2702,7 @@
       ]
     },
     {
-      "id": 47,
+      "id": 46,
       "type": "table",
       "title": "$metric · current series & labels",
       "description": "显示选中 metric 当前每条 series 的完整来源标签和值。",
@@ -2773,7 +2714,7 @@
         "h": 11,
         "w": 8,
         "x": 16,
-        "y": 123
+        "y": 124
       },
       "fieldConfig": {
         "defaults": {
@@ -2839,7 +2780,7 @@
       ]
     },
     {
-      "id": 48,
+      "id": 47,
       "type": "timeseries",
       "title": "$metric · 5-minute change per second",
       "description": "Counter 看 rate；累计 gauge 看 delta ÷ 300。两条算法同时展示仅为诊断，请依据 catalog 的 TYPE 选用。",
@@ -2851,7 +2792,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 134
+        "y": 135
       },
       "fieldConfig": {
         "defaults": {
@@ -3118,5 +3059,5 @@
   "timezone": "browser",
   "title": "Intel PMT · BMC + In-band Telemetry",
   "uid": "pmt-avc01-redfish",
-  "version": 16
+  "version": 17
 }

@@ -125,8 +125,10 @@ func processAggregatorData(
 // expandFIVRHealthMetrics turns each packed 64-bit FIVR Health monitor into
 // independently graphable two-bit status codes. The XML describes these words
 // as "2bits per FIVR" but intentionally leaves the individual rails unnamed.
-// DEADBEEF is firmware poison, so the raw/status metrics are suppressed while
-// an availability gauge remains visible for alerting and dashboards.
+// DEADBEEF is a recognizable data-unavailable sentinel rather than a plausible
+// packed status word, so raw/status metrics are suppressed while an
+// availability gauge remains visible for dashboards. The public metadata does
+// not define rail names or the meanings of status codes 0..3.
 func expandFIVRHealthMetrics(values map[string]MetricValue) {
 	for name, metric := range values {
 		if !strings.Contains(strings.ToUpper(name), "FIVR_HEALTH_MONITOR") ||
@@ -143,13 +145,13 @@ func expandFIVRHealthMetrics(values map[string]MetricValue) {
 		availableName := name + ".available"
 		values[availableName] = MetricValue{
 			Name: availableName, Type: "gauge", Value: uint64(1),
-			Description: "FIVR Health monitor data availability (1=valid, 0=firmware poison)",
+			Description: "FIVR Health monitor data availability (1=packed word present, 0=DEADBEEF sentinel)",
 		}
 		if isKnownPoisonValue(raw) {
 			delete(values, name)
 			values[availableName] = MetricValue{
 				Name: availableName, Type: "gauge", Value: uint64(0),
-				Description: "FIVR Health monitor data availability (1=valid, 0=firmware poison)",
+				Description: "FIVR Health monitor data availability (1=packed word present, 0=DEADBEEF sentinel)",
 			}
 			continue
 		}
