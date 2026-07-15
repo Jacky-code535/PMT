@@ -127,6 +127,12 @@ def add_table(title: str, description: str, x: int, w: int, h: int, queries: lis
     panels.append(panel)
 
 
+def add_text(title: str, content: str, x: int, w: int, h: int = 5) -> None:
+    panel = base_panel(title, "", x, w, h, "text")
+    panel.update({"options": {"content": content, "mode": "markdown"}})
+    panels.append(panel)
+
+
 def advance(height: int) -> None:
     global y
     y += height
@@ -198,16 +204,25 @@ add_bar_gauge("Throttle · 1024-cycle window", "最近 1024 cycles 窗口内 thr
               f'topk(24,{core_throttle1024})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "locale", 0)
 advance(9)
 
-row("04 · Selected Core histograms / 频率·温度·电压驻留", "使用顶部 Core 变量查看任意 core。图中为各硬件 bucket 累计 counter 的 5 分钟变化率；采用堆叠面积显示分布。")
+row("04 · Selected Core operating range / Core 运行区间", "选择 Core 后查看最近 5 分钟在各物理区间的驻留百分比。它是时间分布，不是瞬时频率或瞬时电压。当前 PMT schema 仅提供瞬时温度；没有可安全展示的瞬时频率/电压 gauge。")
+histogram_ranges = {
+    "freq": ["C6 sleep", "≤800 MHz", "900–1200 MHz", "1300–1600 MHz", "1700–2000 MHz", "2100–2400 MHz", "2500–2800 MHz", "2900–3200 MHz", "3300–3600 MHz", "3700–4000 MHz", "4100–4400 MHz", ">4400 MHz"],
+    "temp": ["<20 °C", "20.5–27.5 °C", "28–35 °C", "35.5–42.5 °C", "43–50 °C", "50.5–57.5 °C", "58–65 °C", "65.5–72.5 °C", "73–80 °C", "80.5–87.5 °C", "88–95 °C", ">95 °C"],
+    "volt": ["<602 mV", "602.5–657 mV", "657.5–712 mV", "712.5–767 mV", "767.5–822 mV", "822.5–877 mV", "877.5–932 mV", "932.5–987 mV", "987.5–1042 mV", "1042.5–1097 mV", "1097.5–1152 mV", ">1152 mV"],
+}
 for x, kind, title_text in [(0, "freq", "Frequency residency"), (8, "temp", "Temperature residency"), (16, "volt", "Voltage residency")]:
-    add_timeseries(f"{title_text} · Core $core", "Bucket 的准确物理范围见 metric catalog 中对应 HELP。", x, 8, 9,
+    total_rate = " + ".join(
+        f'sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[5m]))'
+        for bucket in range(12)
+    )
+    add_timeseries(f"{title_text} · Core $core", "每条色带表示最近 5 分钟落入该物理区间的时间占比；所有色带合计约 100%。", x, 8, 9,
                    [
                        target(
-                           f'sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[5m]))',
-                           f"r{bucket}", chr(ord("A") + bucket),
+                           f'100 * sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[5m])) / clamp_min({total_rate}, 1e-12)',
+                           histogram_ranges[kind][bucket], chr(ord("A") + bucket),
                        )
                        for bucket in range(12)
-                   ], unit="ops", minimum=0, stacking="normal", legend_place="right")
+                   ], unit="percent", minimum=0, maximum=100, stacking="normal", legend_place="right")
 advance(9)
 
 row("05 · Memory, CHA & accelerator / 内存·缓存代理·QAT", "RDT MBM/CMT、CHA enable mask 与 QAT telemetry。大量同类 metrics 采用 Top-K，避免一次绘制数千条曲线。")
@@ -255,59 +270,47 @@ add_timeseries("Data-loss positive delta by source", "最近五分钟新增 data
 ], unit="locale", minimum=0)
 advance(10)
 
-row("07 · GNR FIVR Health / 两位状态解码", "使用精确 GUID+Size XML（CDIE 0x22806802/6784、IODIE 0x22491753/6272）。每个 64-bit monitor 拆为 32 个两位状态码；DEADBEEF 固件 poison 不作为健康值输出。")
+row("07 · FIVR telemetry availability / FIVR 数据可用性", "本区只回答 FIVR telemetry 是否可解释，不把未公开含义的两位码或固件 poison 误报为硬件故障。")
 fivr_available = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available",{sel}}}'
 fivr_nonzero = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count",{sel}}}'
-fivr_status = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_status_[0-9]+",{sel}}}'
-fivr_raw = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]",{sel}}}'
-add_stat("C-Die FIVR data", "0x22806802/6784：所有 monitor 均有效时为 1。", 0, 4,
+add_stat("C-Die data usable", "1=所选 C-Die monitor words 均可解码；0=至少一个 word 不可用。这里只表示数据质量，不是健康结论。", 0, 6,
          f'min({{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22806802",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}})',
          thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}], color_mode="background")
-add_stat("IO-Die FIVR data", "0x22491753/6272：0 表示 XML 匹配成功但 payload 为 DEADBEEF poison，不能解释为硬件故障。", 4, 4,
+add_stat("IO-Die data usable", "0=当前 payload 是固件 poison，因此 IO-Die FIVR 状态未知；不能解释为硬件故障。", 6, 6,
          f'min({{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22491753",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}})',
-         thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}], color_mode="background")
-add_stat("Unavailable monitor words", "当前筛选范围内被固件 poison 标记为不可用的 FIVR monitor word 数。", 8, 4,
+         thresholds=[{"color": "yellow", "value": None}, {"color": "green", "value": 1}], color_mode="background")
+add_stat("Unavailable data words", "被固件标为不可用的 monitor word 数；该数字衡量数据缺口，不衡量硬件故障。", 12, 6,
          f'count({fivr_available}) - sum({fivr_available})', unit="locale",
-         thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}], color_mode="background")
-add_stat("Non-zero status codes", "有效 monitor 中所有非零两位状态码总数；具体含义需结合平台 FIVR 状态编码规范。", 12, 4,
+         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 1}], color_mode="background")
+add_stat("Engineering codes (non-zero)", "仅统计可用数据中的非零两位码。平台未提供码义映射，因此不能据此宣告 PASS/FAIL。", 18, 6,
          f'sum({fivr_nonzero})', unit="locale",
-         thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}], color_mode="background")
-add_stat("Exact PUNIT instances", "精确 XML 成功解码并产生 FIVR availability 的 PUNIT instance 数。", 16, 4,
-         f'count(count by (PMTGuid,DeviceId,AccessId) ({fivr_available}))', unit="locale")
-add_stat("Exact schema mappings", "当前后端要求精确匹配两组 GNR PUNIT GUID+Size，不使用 GUID-only fallback。", 20, 4,
-         f'count(count by (PMTGuid,PMTSizeBytes) ({fivr_available}))', unit="locale")
+         thresholds=[{"color": "blue", "value": None}], color_mode="background")
 advance(4)
 
-add_bar_gauge("FIVR monitor availability", "每个 die instance、monitor word 的数据有效性。1=有效；0=DEADBEEF poison。", 0, 8, 10,
-              fivr_available, "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}", "short", 0, 1,
+add_bar_gauge("Data availability by die and source", "按 die/source 汇总：1=该组全部 monitor words 可用；0=该组存在固件 poison。", 0, 12, 9,
+              f'min by(PMTGuid,DeviceId,AccessId,CollectionMode) ({fivr_available})', "{{CollectionMode}} · {{PMTGuid}} · D{{DeviceId}}/A{{AccessId}}", "short", 0, 1,
               [{"color": "red", "value": None}, {"color": "green", "value": 1}])
-add_bar_gauge("Non-zero codes per monitor", "每个有效 64-bit monitor word 内非零两位状态码数量（0..32）。", 8, 8, 10,
-              fivr_nonzero, "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}", "locale", 0, 32,
-              [{"color": "green", "value": None}, {"color": "red", "value": 1}])
-add_bar_gauge("Packed two-bit status codes", "各 packed index 的原始两位码（0..3）；只显示有效 monitor。", 16, 8, 10,
-              f'topk(96,{fivr_status})', "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}", "short", 0, 3,
-              [{"color": "green", "value": None}, {"color": "yellow", "value": 1}, {"color": "red", "value": 2}])
-advance(10)
-add_timeseries("FIVR non-zero status history", "每个 monitor word 的非零两位状态码数量历史。", 0, 12, 8, [
-    target(fivr_nonzero, "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}")
-], unit="locale", minimum=0, maximum=32, legend_place="right")
-add_timeseries("FIVR raw monitor words", "仅展示有效的 packed 64-bit 原始值；DEADBEEF 已在 receiver 中抑制。", 12, 12, 8, [
-    target(fivr_raw, "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}")
-], unit="short", minimum=0, legend_place="right")
-advance(8)
+add_text("How to read this section / 如何解读", """### Safe customer interpretation
 
-row("08 · Metric Explorer / 全量 metrics 探索", "顶部 Metric 下拉框支持搜索任意 metric 名称。专用面板覆盖关键语义；Explorer 覆盖全部长尾 metrics。")
-add_timeseries("$metric · history", "选择任意 PMT metric 绘制历史。单位和语义请查 docs/pmt-metrics-catalog.csv 的 HELP；counter/gauge 不能一概而论。", 0, 16, 11, [
-    target(f'$metric{{{sel}}}', "D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}")
+- **Usable = 1**: telemetry can be decoded; this alone does not prove FIVR health.
+- **Usable = 0**: telemetry is unavailable/poisoned; report **status unknown**, not hardware failure.
+- **Engineering codes**: values are retained for engineering follow-up, but no PASS/FAIL meaning is assigned without the platform code specification.
+- Exact schema matching remains enforced internally; raw GUID/code details are intentionally not used as primary customer labels.""", 12, 12, 9)
+advance(9)
+
+row("08 · Metric Explorer / 全量搜索", "在顶部 Metric 中输入名称片段即可搜索全部 PMT metrics。查询使用 __name__ selector，避免动态 metric 名拼接失败。")
+explorer_selector = f'{{__name__="$metric",{sel}}}'
+add_timeseries("$metric · raw history", "原始历史值。请先在 metric catalog 确认 TYPE、HELP 和单位；counter 与 gauge 的解释方式不同。", 0, 16, 11, [
+    target(explorer_selector, "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}")
 ], unit="short", legend_place="right")
 add_table("$metric · current series & labels", "显示选中 metric 当前每条 series 的完整来源标签和值。", 16, 8, 11, [
-    target(f'$metric{{{sel}}}', "", instant=True, fmt="table")
+    target(explorer_selector, "", instant=True, fmt="table")
 ])
 advance(11)
-add_timeseries("$metric · 5m change", "对选中 metric 同时给出 rate（适合 counter）和 delta/300（适合累计 gauge）；根据 catalog 中 TYPE/HELP 选择正确解释。", 0, 24, 8, [
-    target(f'rate($metric{{{sel}}}[5m])', "rate · D{{DeviceId}}/A{{AccessId}}", "A"),
-    target(f'delta($metric{{{sel}}}[5m])/300', "delta/300 · D{{DeviceId}}/A{{AccessId}}", "B"),
-], unit="ops")
+add_timeseries("$metric · 5-minute change per second", "Counter 看 rate；累计 gauge 看 delta ÷ 300。两条算法同时展示仅为诊断，请依据 catalog 的 TYPE 选用。", 0, 24, 8, [
+    target(f'rate({explorer_selector}[5m])', "counter rate/s · D{{DeviceId}}/A{{AccessId}}", "A"),
+    target(f'delta({explorer_selector}[5m])/300', "gauge Δ/s · D{{DeviceId}}/A{{AccessId}}", "B"),
+], unit="short")
 advance(8)
 
 variables = [
@@ -360,7 +363,7 @@ dashboard = {
     "templating": {"list": variables}, "time": {"from": "now-30m", "to": "now"},
     "timepicker": {"refresh_intervals": ["5s", "10s", "20s", "30s", "1m", "5m"],
                    "time_options": ["5m", "15m", "30m", "1h", "6h", "12h", "24h", "7d"]},
-    "timezone": "browser", "title": "Intel PMT · BMC + In-band Telemetry", "uid": "pmt-avc01-redfish", "version": 15,
+    "timezone": "browser", "title": "Intel PMT · BMC + In-band Telemetry", "uid": "pmt-avc01-redfish", "version": 16,
 }
 
 serialized = json.dumps(dashboard, indent=2, ensure_ascii=False) + "\n"
