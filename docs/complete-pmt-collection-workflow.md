@@ -136,6 +136,14 @@ Catalog 生成器 `tools/otel/export_pmt_metric_catalog.py` 同时读取两个 e
 - `docs/pmt-metrics-summary.md`
 - `docs/pmt-metrics-catalog.csv`
 
+BMC 单次数据快照由 `tools/otel/export_pmt_bmc_snapshot.py` 对
+`http://localhost:8889/metrics` 执行一次 scrape，并输出
+`docs/pmt-bmc-snapshot.csv`。CSV 每行是一条 time series，包含当前值、类型、
+HELP、完整 labels 和单位提示。由于 Prometheus metadata 当前不提供 unit，
+非空单位由 OpenTelemetry 写入 metric name 的后缀推断，并通过
+`unit_source=metric_name_suffix` 明确标记；`unit_source=unspecified` 表示 XML
+未声明单位或无法可靠推断。
+
 ## 9. 日常验证
 
 ### 分享 Dashboard
