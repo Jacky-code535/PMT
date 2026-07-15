@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=OpenTelemetry Collector for all local Intel PMT metrics
+After=network-online.target
+Wants=network-online.target
+ConditionPathIsDirectory=/sys/class/intel_pmt
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/otelcol-pmt-local --config /etc/otelcol-pmt-local.yaml
+Restart=on-failure
+RestartSec=10
+User=root
+Group=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/sys/class/intel_pmt /opt/intel-pmt
+
+[Install]
+WantedBy=multi-user.target

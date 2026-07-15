@@ -7,7 +7,7 @@ A standardized telemetry exposure framework across Intel platforms combining dis
 
 **Q: Where do I start?**
 
-See `docs/guides/getting-started.md` for a quick setup.
+For the deployed avc01 solution, start with `docs/README.md`, then read `docs/complete-pmt-collection-workflow.md`. Use `docs/getting-started.md` only for the upstream generic quick setup.
 
 ## Telemetry & Schemas
 **Q: How do I know which XML files to use?**

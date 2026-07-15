@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+[Unit]
+Description=Collect Intel PMT GNR FIVR Health every 20 seconds
+
+[Timer]
+OnBootSec=20s
+OnUnitActiveSec=20s
+AccuracySec=1s
+Persistent=false
+Unit=intel-pmt-fivr-health.service
+
+[Install]
+WantedBy=timers.target

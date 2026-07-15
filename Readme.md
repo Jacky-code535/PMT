@@ -67,6 +67,11 @@ cd tools/otel
 
 ## Documentation
 Additional documentation lives under `docs/`:
+- **Start here — complete avc01 BMC + in-band workflow:** `docs/complete-pmt-collection-workflow.md`
+- Complete metric summary: `docs/pmt-metrics-summary.md`
+- Searchable metric catalog: `docs/pmt-metrics-catalog.csv`
+- GNR FIVR exact-schema workflow: `docs/gnr-fivr-health-collection-workflow.md`
+- Backend reproduction guide: `docs/pmt-telemetry-backend-reproduction.md`
 - FAQ: `docs/FAQ.md`
 - Getting Started Guide: `docs/getting-started.md`
 - Use cases: `docs/use-cases.md`

@@ -361,6 +361,16 @@ func (ipr *intelpmtreceiver) getPMTLocal() map[string][]MetricAggregator {
 		// add attributes
 		dataAggregator.Attributes["telem"] = aggregatorInfo.Path
 		dataAggregator.Attributes["device"] = deviceName
+		dataAggregator.Attributes["CollectionMode"] = "local"
+		dataAggregator.Attributes["PMTGuid"] = guid
+		dataAggregator.Attributes["PMTSizeBytes"] = int64(size)
+		dataAggregator.Attributes["PMTEndpoint"] = aggregatorInfo.Attributes["hostname"]
+		dataAggregator.Attributes["DeviceId"] = aggregatorInfo.Attributes["hostname"]
+		dataAggregator.Attributes["AccessId"] = deviceName
+		dataAggregator.Attributes["DeviceType"] = "LocalPMT"
+		dataAggregator.Attributes["AccessType"] = "sysfs"
+		dataAggregator.Attributes["SourceId"] = "0"
+		dataAggregator.Attributes["SourceType"] = "Aggregator"
 		for attributeKey, attributeValue := range aggregatorInfo.Attributes {
 			if intValue, ok := attributeValue.(int64); ok {
 				dataAggregator.Attributes[attributeKey] = intValue
@@ -504,6 +514,10 @@ func (ipr *intelpmtreceiver) getPMTRedfish() map[string][]MetricAggregator {
 
 			// add attributes
 			dataAggregator.Attributes["RedfishEndpoint"] = endpointLabel
+			dataAggregator.Attributes["PMTEndpoint"] = endpointLabel
+			dataAggregator.Attributes["CollectionMode"] = "redfish"
+			dataAggregator.Attributes["PMTGuid"] = guid
+			dataAggregator.Attributes["PMTSizeBytes"] = int64(size)
 			for attributeKey, attributeValue := range aggregatorInfo.Attributes {
 				if intValue, ok := attributeValue.(int64); ok {
 					dataAggregator.Attributes[attributeKey] = intValue

@@ -1,5 +1,7 @@
 # Getting Started
 
+> **文档定位：**这是上游仓库的最小通用入门，不是 avc01 生产部署手册。先读 `docs/README.md`，再读 `docs/complete-pmt-collection-workflow.md`；当前生产链路以 Go OTel Collector 为主，下面的 Python agent 仅用于通用本地验证。
+
 ## 1. Clone Repository
 ```bash
 git clone https://github.com/intel/Intel-PMT.git

@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Comprehensive Intel PMT Redfish observability: health, thermal, core activity, histograms, memory/CHA, QAT, collection quality, and all-metric exploration.",
+  "description": "Unified BMC Redfish and in-band Intel PMT observability with exact-schema GNR PUNIT/FIVR decoding and all-metric exploration.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -102,7 +102,7 @@
       },
       "targets": [
         {
-          "expr": "min(up{job=\"otel-pmt\"})",
+          "expr": "min(up{job=~\"otel-pmt.*\"})",
           "legendFormat": "",
           "refId": "A"
         }
@@ -157,7 +157,7 @@
       },
       "targets": [
         {
-          "expr": "count({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "count({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "",
           "refId": "A"
         }
@@ -212,7 +212,7 @@
       },
       "targets": [
         {
-          "expr": "count(count by (__name__) ({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}))",
+          "expr": "count(count by (__name__) ({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -275,7 +275,7 @@
       },
       "targets": [
         {
-          "expr": "time() - max(timestamp(label_replace({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"metric\",\"$1\",\"__name__\",\"(.+)\")))",
+          "expr": "time() - max(timestamp(label_replace({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"metric\",\"$1\",\"__name__\",\"(.+)\")))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -338,7 +338,7 @@
       },
       "targets": [
         {
-          "expr": "max({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "max({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "",
           "refId": "A"
         }
@@ -397,7 +397,7 @@
       },
       "targets": [
         {
-          "expr": "sum(clamp_min(delta(agg_data_loss_count_agg_data_loss_count{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}[5m]),0))",
+          "expr": "sum(clamp_min(increase(agg_data_loss_count_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]),0))",
           "legendFormat": "",
           "refId": "A"
         }
@@ -463,7 +463,7 @@
       },
       "targets": [
         {
-          "expr": "count({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "count({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "PMT series",
           "refId": "A"
         }
@@ -530,8 +530,8 @@
       },
       "targets": [
         {
-          "expr": "scrape_duration_seconds{job=\"otel-pmt\"}",
-          "legendFormat": "scrape seconds",
+          "expr": "scrape_duration_seconds{job=~\"otel-pmt.*\"}",
+          "legendFormat": "{{job}} · {{instance}}",
           "refId": "A"
         }
       ]
@@ -597,8 +597,8 @@
       },
       "targets": [
         {
-          "expr": "agg_data_loss_count_agg_data_loss_count{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
-          "legendFormat": "dev{{DeviceId}} / access{{AccessId}}",
+          "expr": "agg_data_loss_count_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{CollectionMode}} · dev{{DeviceId}} / access{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -679,7 +679,7 @@
       },
       "targets": [
         {
-          "expr": "topk(32,label_replace({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\".*_temp_c([0-9]+)_temp_celcius\"))",
+          "expr": "topk(32,label_replace({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\".*_temp_c([0-9]+)_temp_celsius\"))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A",
           "instant": true,
@@ -750,7 +750,7 @@
       },
       "targets": [
         {
-          "expr": "topk(20,label_replace({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\".*_temp_c([0-9]+)_temp_celcius\"))",
+          "expr": "topk(20,label_replace({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\".*_temp_c([0-9]+)_temp_celsius\"))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
@@ -818,17 +818,17 @@
       },
       "targets": [
         {
-          "expr": "max({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "max({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "Maximum",
           "refId": "A"
         },
         {
-          "expr": "avg({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "avg({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "Average",
           "refId": "B"
         },
         {
-          "expr": "min({__name__=~\".*_temp_c[0-9]+_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "min({__name__=~\".*_temp_c[0-9]+_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "Minimum",
           "refId": "C"
         }
@@ -896,8 +896,8 @@
       },
       "targets": [
         {
-          "expr": "{__name__=~\".*_temp_c$core_temp_celcius\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
-          "legendFormat": "D{{DeviceId}}/A{{AccessId}}",
+          "expr": "{__name__=~\".*_temp_c${core}_temp_celsius\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -977,7 +977,7 @@
       },
       "targets": [
         {
-          "expr": "topk(20,clamp_min(delta(label_replace({__name__=~\"c[0-9]+_usage_meter_core_usage_total\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_usage_meter_core_usage_total\")[5m:])/300,0))",
+          "expr": "topk(20,clamp_min(delta(label_replace({__name__=~\"c[0-9]+_usage_meter_core_usage_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_usage_meter_core_usage_total\")[5m:])/300,0))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
@@ -1044,7 +1044,7 @@
       },
       "targets": [
         {
-          "expr": "clamp_min(delta(c$core_usage_meter_core_usage_total{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}[5m])/300,0)",
+          "expr": "clamp_min(delta(c${core}_usage_meter_core_usage_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300,0)",
           "legendFormat": "D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
@@ -1103,7 +1103,7 @@
       },
       "targets": [
         {
-          "expr": "topk(24,label_replace({__name__=~\"c[0-9]+_pvp_throttle_64_.*\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_pvp_throttle_64_.*\"))",
+          "expr": "topk(24,label_replace({__name__=~\"c[0-9]+_pvp_throttle_64_.*\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_pvp_throttle_64_.*\"))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A",
           "instant": true,
@@ -1165,7 +1165,7 @@
       },
       "targets": [
         {
-          "expr": "topk(24,label_replace({__name__=~\"c[0-9]+_pvp_throttle_1024_.*\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_pvp_throttle_1024_.*\"))",
+          "expr": "topk(24,label_replace({__name__=~\"c[0-9]+_pvp_throttle_1024_.*\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\"c([0-9]+)_pvp_throttle_1024_.*\"))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A",
           "instant": true,
@@ -1249,9 +1249,64 @@
       },
       "targets": [
         {
-          "expr": "sum by(bucket)(rate(label_replace({__name__=~\"c$core_freq_hist_r[0-9]+_second_total\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"bucket\",\"$1\",\"__name__\",\"c$core_freq_hist_(r[0-9]+)_second_total\")[5m:]))",
-          "legendFormat": "{{bucket}}",
+          "expr": "sum(rate(c${core}_freq_hist_r0_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r0",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r1_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r1",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r2_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r2",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r3_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r3",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r4_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r4",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r5_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r5",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r6_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r6",
+          "refId": "G"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r7_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r7",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r8_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r8",
+          "refId": "I"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r9_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r9",
+          "refId": "J"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r10_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r10",
+          "refId": "K"
+        },
+        {
+          "expr": "sum(rate(c${core}_freq_hist_r11_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r11",
+          "refId": "L"
         }
       ]
     },
@@ -1316,9 +1371,64 @@
       },
       "targets": [
         {
-          "expr": "sum by(bucket)(rate(label_replace({__name__=~\"c$core_temp_hist_r[0-9]+_second_total\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"bucket\",\"$1\",\"__name__\",\"c$core_temp_hist_(r[0-9]+)_second_total\")[5m:]))",
-          "legendFormat": "{{bucket}}",
+          "expr": "sum(rate(c${core}_temp_hist_r0_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r0",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r1_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r1",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r2_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r2",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r3_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r3",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r4_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r4",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r5_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r5",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r6_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r6",
+          "refId": "G"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r7_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r7",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r8_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r8",
+          "refId": "I"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r9_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r9",
+          "refId": "J"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r10_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r10",
+          "refId": "K"
+        },
+        {
+          "expr": "sum(rate(c${core}_temp_hist_r11_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r11",
+          "refId": "L"
         }
       ]
     },
@@ -1383,9 +1493,64 @@
       },
       "targets": [
         {
-          "expr": "sum by(bucket)(rate(label_replace({__name__=~\"c$core_volt_hist_r[0-9]+_second_total\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"bucket\",\"$1\",\"__name__\",\"c$core_volt_hist_(r[0-9]+)_second_total\")[5m:]))",
-          "legendFormat": "{{bucket}}",
+          "expr": "sum(rate(c${core}_volt_hist_r0_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r0",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r1_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r1",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r2_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r2",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r3_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r3",
+          "refId": "D"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r4_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r4",
+          "refId": "E"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r5_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r5",
+          "refId": "F"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r6_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r6",
+          "refId": "G"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r7_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r7",
+          "refId": "H"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r8_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r8",
+          "refId": "I"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r9_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r9",
+          "refId": "J"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r10_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r10",
+          "refId": "K"
+        },
+        {
+          "expr": "sum(rate(c${core}_volt_hist_r11_second_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]))",
+          "legendFormat": "r11",
+          "refId": "L"
         }
       ]
     },
@@ -1464,8 +1629,8 @@
       },
       "targets": [
         {
-          "expr": "topk(20,clamp_min(delta(label_replace({__name__=~\"cha[0-9]+_rmid_.*_rdt_mbm_total_.*\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"channel\",\"$1\",\"__name__\",\".*_(cha[0-9]+_rmid[0-9]+)_rdt_mbm_total\")[5m:])/300,0))",
-          "legendFormat": "{{channel}} · D{{DeviceId}}/A{{AccessId}}",
+          "expr": "topk(20,clamp_min(rate(label_replace({__name__=~\"cha[0-9]+_rmid[0-9]+_rdt_mbm_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"channel\",\"$1\",\"__name__\",\"(cha[0-9]+_rmid[0-9]+)_rdt_mbm_total\")[5m:]),0))",
+          "legendFormat": "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -1531,8 +1696,8 @@
       },
       "targets": [
         {
-          "expr": "topk(20,clamp_min(delta(label_replace({__name__=~\"cha[0-9]+_rmid_.*_rdt_mbm_local_.*\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"channel\",\"$1\",\"__name__\",\".*_(cha[0-9]+_rmid[0-9]+)_rdt_mbm_local\")[5m:])/300,0))",
-          "legendFormat": "{{channel}} · D{{DeviceId}}/A{{AccessId}}",
+          "expr": "topk(20,clamp_min(rate(label_replace({__name__=~\"cha[0-9]+_rmid[0-9]+_rdt_mbm_local_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"channel\",\"$1\",\"__name__\",\"(cha[0-9]+_rmid[0-9]+)_rdt_mbm_local_total\")[5m:]),0))",
+          "legendFormat": "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -1590,8 +1755,8 @@
       },
       "targets": [
         {
-          "expr": "topk(24,label_replace({__name__=~\"cha[0-9]+_rmid_.*_rdt_cmt_.*\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"channel\",\"$1\",\"__name__\",\".*_(cha[0-9]+_rmid[0-9]+)_rdt_cmt\"))",
-          "legendFormat": "{{channel}} · D{{DeviceId}}/A{{AccessId}}",
+          "expr": "topk(24,label_replace({__name__=~\"cha[0-9]+_rmid[0-9]+_rdt_cmt_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"channel\",\"$1\",\"__name__\",\"(cha[0-9]+_rmid[0-9]+)_rdt_cmt_total\"))",
+          "legendFormat": "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A",
           "instant": true,
           "range": false,
@@ -1657,7 +1822,7 @@
       },
       "targets": [
         {
-          "expr": "max by(cha,DeviceId)(label_replace({__name__=~\"cha_enabled_mask_cha_[0-9]+_en\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"cha\",\"$1\",\"__name__\",\"cha_enabled_mask_cha_([0-9]+)_en\"))",
+          "expr": "max by(cha,DeviceId)(label_replace({__name__=~\"cha_enabled_mask_cha_[0-9]+_en\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"cha\",\"$1\",\"__name__\",\"cha_enabled_mask_cha_([0-9]+)_en\"))",
           "legendFormat": "CHA {{cha}} · D{{DeviceId}}",
           "refId": "A",
           "instant": true,
@@ -1727,8 +1892,8 @@
       },
       "targets": [
         {
-          "expr": "{__name__=~\"qat[01]_tl_.*_bw_(in|out)_megabytes\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
-          "legendFormat": "{{__name__}} · D{{DeviceId}}/A{{AccessId}}",
+          "expr": "{__name__=~\"qat[01]_tl_bw_(in|out)_megabytes_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{__name__}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -1794,7 +1959,7 @@
       },
       "targets": [
         {
-          "expr": "{__name__=~\"qat[01]_avg_.*_nanoseconds\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
+          "expr": "{__name__=~\"qat[01]_avg_.*_nanoseconds\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "{{__name__}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
@@ -1861,8 +2026,8 @@
       },
       "targets": [
         {
-          "expr": "{__name__=~\"qat[01]_tl_.*_max_.*_nanoseconds\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
-          "legendFormat": "{{__name__}} · D{{DeviceId}}/A{{AccessId}}",
+          "expr": "{__name__=~\"qat[01]_tl_max_(gp|rd)_lat_nanoseconds_total\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{__name__}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         }
       ]
@@ -1942,7 +2107,7 @@
       },
       "targets": [
         {
-          "expr": "count by (DeviceId,AccessId,SourceId,DeviceType,AccessType) ({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "expr": "count by (DeviceId,AccessId,SourceId,DeviceType,AccessType) ({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -2020,7 +2185,7 @@
       },
       "targets": [
         {
-          "expr": "agg_data_loss_count_agg_data_loss_count{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
+          "expr": "agg_data_loss_count_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -2028,7 +2193,7 @@
           "format": "table"
         },
         {
-          "expr": "agg_data_loss_timestamp_agg_data_loss_timestamp{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
+          "expr": "agg_data_loss_timestamp_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "",
           "refId": "B",
           "instant": true,
@@ -2103,7 +2268,7 @@
       },
       "targets": [
         {
-          "expr": "max by(core,DeviceId)(label_replace({__name__=~\"core_en_c[0-9]+_en\",RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"},\"core\",\"$1\",\"__name__\",\"core_en_c([0-9]+)_en\"))",
+          "expr": "max by(core,DeviceId)(label_replace({__name__=~\"core_en_c[0-9]+_en\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},\"core\",\"$1\",\"__name__\",\"core_en_c([0-9]+)_en\"))",
           "legendFormat": "Core {{core}} · D{{DeviceId}}",
           "refId": "A",
           "instant": true,
@@ -2173,8 +2338,8 @@
       },
       "targets": [
         {
-          "expr": "clamp_min(delta(agg_data_loss_count_agg_data_loss_count{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}[5m]),0)",
-          "legendFormat": "D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}",
+          "expr": "clamp_min(increase(agg_data_loss_count_total{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m]),0)",
+          "legendFormat": "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}",
           "refId": "A"
         }
       ]
@@ -2182,8 +2347,8 @@
     {
       "id": 38,
       "type": "row",
-      "title": "07 · Metric Explorer / 全量 4,387 metrics 探索",
-      "description": "顶部 Metric 下拉框支持搜索任意 metric 名称。专用面板覆盖关键语义；Explorer 覆盖全部长尾 metrics。",
+      "title": "07 · GNR FIVR Health / 两位状态解码",
+      "description": "使用精确 GUID+Size XML（CDIE 0x22806802/6784、IODIE 0x22491753/6272）。每个 64-bit monitor 拆为 32 个两位状态码；DEADBEEF 固件 poison 不作为健康值输出。",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -2195,6 +2360,706 @@
     },
     {
       "id": 39,
+      "type": "stat",
+      "title": "C-Die FIVR data",
+      "description": "0x22806802/6784：所有 monitor 均有效时为 1。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "min({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22806802\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 40,
+      "type": "stat",
+      "title": "IO-Die FIVR data",
+      "description": "0x22491753/6272：0 表示 XML 匹配成功但 payload 为 DEADBEEF poison，不能解释为硬件故障。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "min({__name__=~\"fivr_health_monitor_.*_available\",PMTGuid=\"0x22491753\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "type": "stat",
+      "title": "Unavailable monitor words",
+      "description": "当前筛选范围内被固件 poison 标记为不可用的 FIVR monitor word 数。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}) - sum({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 42,
+      "type": "stat",
+      "title": "Non-zero status codes",
+      "description": "有效 monitor 中所有非零两位状态码总数；具体含义需结合平台 FIVR 状态编码规范。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "sum({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "type": "stat",
+      "title": "Exact PUNIT instances",
+      "description": "精确 XML 成功解码并产生 FIVR availability 的 PUNIT instance 数。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(count by (PMTGuid,DeviceId,AccessId) ({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}))",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 44,
+      "type": "stat",
+      "title": "Exact schema mappings",
+      "description": "当前后端要求精确匹配两组 GNR PUNIT GUID+Size，不使用 GUID-only fallback。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 109
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(count by (PMTGuid,PMTSizeBytes) ({__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}))",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "type": "bargauge",
+      "title": "FIVR monitor availability",
+      "description": "每个 die instance、monitor word 的数据有效性。1=有效；0=DEADBEEF poison。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 113
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 46,
+      "type": "bargauge",
+      "title": "Non-zero codes per monitor",
+      "description": "每个有效 64-bit monitor word 内非零两位状态码数量（0..32）。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 113
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "locale",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "min": 0,
+          "max": 32
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "type": "bargauge",
+      "title": "Packed two-bit status codes",
+      "description": "各 packed index 的原始两位码（0..3）；只显示有效 monitor。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 113
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
+            ]
+          },
+          "min": 0,
+          "max": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "left",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "expr": "topk(96,{__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_status_[0-9]+\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"})",
+          "legendFormat": "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ]
+    },
+    {
+      "id": 48,
+      "type": "timeseries",
+      "title": "FIVR non-zero status history",
+      "description": "每个 monitor word 的非零两位状态码数量历史。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 123
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "locale",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "min": 0,
+          "max": 32
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 360
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "type": "timeseries",
+      "title": "FIVR raw monitor words",
+      "description": "仅展示有效的 packed 64-bit 原始值；DEADBEEF 已在 receiver 中抑制。",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 123
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 360
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "{__name__=~\"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{PMTGuid}} · D{{DeviceId}}/A{{AccessId}} · {{__name__}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 50,
+      "type": "row",
+      "title": "08 · Metric Explorer / 全量 metrics 探索",
+      "description": "顶部 Metric 下拉框支持搜索任意 metric 名称。专用面板覆盖关键语义；Explorer 覆盖全部长尾 metrics。",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 131
+      },
+      "panels": []
+    },
+    {
+      "id": 51,
       "type": "timeseries",
       "title": "$metric · history",
       "description": "选择任意 PMT metric 绘制历史。单位和语义请查 docs/pmt-metrics-catalog.csv 的 HELP；counter/gauge 不能一概而论。",
@@ -2206,7 +3071,7 @@
         "h": 11,
         "w": 16,
         "x": 0,
-        "y": 109
+        "y": 132
       },
       "fieldConfig": {
         "defaults": {
@@ -2253,14 +3118,14 @@
       },
       "targets": [
         {
-          "expr": "$metric{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
+          "expr": "$metric{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}",
           "refId": "A"
         }
       ]
     },
     {
-      "id": 40,
+      "id": 52,
       "type": "table",
       "title": "$metric · current series & labels",
       "description": "显示选中 metric 当前每条 series 的完整来源标签和值。",
@@ -2272,7 +3137,7 @@
         "h": 11,
         "w": 8,
         "x": 16,
-        "y": 109
+        "y": 132
       },
       "fieldConfig": {
         "defaults": {
@@ -2320,7 +3185,7 @@
       },
       "targets": [
         {
-          "expr": "$metric{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}",
+          "expr": "$metric{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -2338,7 +3203,7 @@
       ]
     },
     {
-      "id": 41,
+      "id": 53,
       "type": "timeseries",
       "title": "$metric · 5m change",
       "description": "对选中 metric 同时给出 rate（适合 counter）和 delta/300（适合累计 gauge）；根据 catalog 中 TYPE/HELP 选择正确解释。",
@@ -2350,7 +3215,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 120
+        "y": 143
       },
       "fieldConfig": {
         "defaults": {
@@ -2397,12 +3262,12 @@
       },
       "targets": [
         {
-          "expr": "rate($metric{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}[5m])",
+          "expr": "rate($metric{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])",
           "legendFormat": "rate · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         },
         {
-          "expr": "delta($metric{RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\",AccessId=~\"$access\"}[5m])/300",
+          "expr": "delta($metric{PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300",
           "legendFormat": "delta/300 · D{{DeviceId}}/A{{AccessId}}",
           "refId": "B"
         }
@@ -2414,7 +3279,9 @@
   "tags": [
     "Intel PMT",
     "Redfish",
+    "in-band",
     "GNR",
+    "FIVR",
     "hardware telemetry",
     "comprehensive"
   ],
@@ -2429,16 +3296,44 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({RedfishEndpoint=~\".+\"},RedfishEndpoint)",
+          "query": "label_values({PMTEndpoint=~\".+\"},PMTEndpoint)",
           "refId": "PrometheusVariableQueryEditor-Endpoint"
         },
-        "definition": "label_values({RedfishEndpoint=~\".+\"},RedfishEndpoint)",
+        "definition": "label_values({PMTEndpoint=~\".+\"},PMTEndpoint)",
         "refresh": 1,
         "sort": 1,
         "current": {
           "selected": true,
           "text": "avc01",
           "value": "avc01"
+        }
+      },
+      {
+        "name": "mode",
+        "label": "Collection mode",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
+          "refId": "PrometheusVariableQueryEditor-Mode"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
         }
       },
       {
@@ -2450,10 +3345,10 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({RedfishEndpoint=\"$endpoint\"},DeviceId)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)",
           "refId": "PrometheusVariableQueryEditor-Device"
         },
-        "definition": "label_values({RedfishEndpoint=\"$endpoint\"},DeviceId)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)",
         "refresh": 1,
         "sort": 3,
         "includeAll": true,
@@ -2478,12 +3373,40 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\"},AccessId)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\"},AccessId)",
           "refId": "PrometheusVariableQueryEditor-Access"
         },
-        "definition": "label_values({RedfishEndpoint=\"$endpoint\",DeviceId=~\"$device\"},AccessId)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\"},AccessId)",
         "refresh": 1,
         "sort": 3,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "die",
+        "label": "PMT GUID / Die",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
+          "refId": "PrometheusVariableQueryEditor-Die"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
+        "refresh": 1,
+        "sort": 1,
         "includeAll": true,
         "allValue": ".*",
         "multi": true,
@@ -2518,16 +3441,16 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({RedfishEndpoint=\"$endpoint\"},__name__)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},__name__)",
           "refId": "PrometheusVariableQueryEditor-Metric"
         },
-        "definition": "label_values({RedfishEndpoint=\"$endpoint\"},__name__)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},__name__)",
         "refresh": 1,
         "sort": 1,
         "current": {
           "selected": true,
-          "text": "c0_c1_c2_c3_temp_c0_temp_celcius",
-          "value": "c0_c1_c2_c3_temp_c0_temp_celcius"
+          "text": "c0_c1_c2_c3_temp_c0_temp_celsius",
+          "value": "c0_c1_c2_c3_temp_c0_temp_celsius"
         }
       }
     ]
@@ -2557,7 +3480,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Intel PMT · Comprehensive Redfish Telemetry",
+  "title": "Intel PMT · BMC + In-band Telemetry",
   "uid": "pmt-avc01-redfish",
-  "version": 10
+  "version": 15
 }

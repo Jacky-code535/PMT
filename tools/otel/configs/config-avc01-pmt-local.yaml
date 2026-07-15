@@ -1,0 +1,22 @@
+# In-band Intel PMT collection on avc01.
+# The exact metadata tree is installed separately under /opt/intel-pmt/xml.
+receivers:
+  intelpmtreceiver:
+    interval: 20s
+    metadata: "/opt/intel-pmt/xml/pmt.xml"
+    mode: local
+    path: /sys/class/intel_pmt/
+
+exporters:
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    metrics:
+      receivers: [intelpmtreceiver]
+      processors: [batch]
+      exporters: [prometheus]

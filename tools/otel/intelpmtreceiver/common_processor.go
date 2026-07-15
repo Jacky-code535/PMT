@@ -17,6 +17,7 @@ package intelpmtreceiver
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"strings"
 
 	"go.uber.org/zap"
@@ -116,5 +117,60 @@ func processAggregatorData(
 		}
 	}
 
+	expandFIVRHealthMetrics(values)
+
 	return values
+}
+
+// expandFIVRHealthMetrics turns each packed 64-bit FIVR Health monitor into
+// independently graphable two-bit status codes. The XML describes these words
+// as "2bits per FIVR" but intentionally leaves the individual rails unnamed.
+// DEADBEEF is firmware poison, so the raw/status metrics are suppressed while
+// an availability gauge remains visible for alerting and dashboards.
+func expandFIVRHealthMetrics(values map[string]MetricValue) {
+	for name, metric := range values {
+		if !strings.Contains(strings.ToUpper(name), "FIVR_HEALTH_MONITOR") ||
+			strings.Contains(name, ".status_") || strings.HasSuffix(name, ".available") ||
+			strings.HasSuffix(name, ".nonzero_status_count") {
+			continue
+		}
+
+		raw, ok := metric.Value.(uint64)
+		if !ok {
+			continue
+		}
+
+		availableName := name + ".available"
+		values[availableName] = MetricValue{
+			Name: availableName, Type: "gauge", Value: uint64(1),
+			Description: "FIVR Health monitor data availability (1=valid, 0=firmware poison)",
+		}
+		if isKnownPoisonValue(raw) {
+			delete(values, name)
+			values[availableName] = MetricValue{
+				Name: availableName, Type: "gauge", Value: uint64(0),
+				Description: "FIVR Health monitor data availability (1=valid, 0=firmware poison)",
+			}
+			continue
+		}
+
+		nonzero := uint64(0)
+		for index := 0; index < 32; index++ {
+			status := (raw >> (2 * index)) & 0x3
+			if status != 0 {
+				nonzero++
+			}
+			statusName := fmt.Sprintf("%s.status_%02d", name, index)
+			values[statusName] = MetricValue{
+				Name: statusName, Type: "gauge", Value: status,
+				Description: fmt.Sprintf("Two-bit FIVR Health status code at packed index %d", index),
+			}
+		}
+
+		countName := name + ".nonzero_status_count"
+		values[countName] = MetricValue{
+			Name: countName, Type: "gauge", Value: nonzero,
+			Description: "Number of non-zero two-bit FIVR Health status codes in this monitor word",
+		}
+	}
 }

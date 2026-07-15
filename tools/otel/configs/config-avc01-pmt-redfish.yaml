@@ -4,7 +4,9 @@
 receivers:
   intelpmtreceiver:
     interval: 20s
-    metadata: "/root/projects/Intel-PMT/xml/pmt.xml"
+    # Uploaded Intel PMT support metadata. This set contains the exact GNR
+    # PUNIT mappings 0x22806802/6784 and 0x22491753/6272.
+    metadata: "/root/projects/applications.manageability.intel-pmt.tools.python.support.intel-pmt-master/xml/pmt.xml"
     mode: redfish
     endpoints:
       avc01:

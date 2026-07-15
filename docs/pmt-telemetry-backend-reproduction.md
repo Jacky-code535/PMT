@@ -1,5 +1,7 @@
 # Intel PMT 后端采集链路：原理、部署、复现与当前状态
 
+> **文档定位：**这是长篇原理、复现和历史排障资料，不是当前运行状态的唯一来源。阅读顺序先看 `docs/README.md`，再看 `docs/complete-pmt-collection-workflow.md`。本文中的旧 URL、metric 数、panel 数和单链路阶段记录仅用于理解演进过程；冲突时以主流程和自动生成 catalog 为准。
+>
 > 本文记录当前服务器上 Intel PMT 后端链路的完整过程，目标是让读者能够理解每一层的职责，并可以在命令行中重新完成安装、构建、验证、切换和故障排查。
 >
 > 当前链路已经从 synthetic 测试切换到真实 BMC Redfish PMT 数据。
@@ -10,25 +12,18 @@
 
 完整 dashboard 说明位于本文的 [第 15 节：当前真实 Grafana dashboard](#15-当前真实-grafana-dashboard)。
 
-服务器上的 dashboard URL：
+当前公司内网分享 URL：
 
 ```text
-http://localhost:3000/d/pmt-avc01-redfish/pmt-real-data-avc01-redfish
+http://10.112.227.52/d/pmt-avc01-redfish
 ```
 
-如果正在自己的电脑上通过 SSH 连接服务器，需要先建立端口转发：
-
-```bash
-ssh -L 3000:127.0.0.1:3000 \
-  root@10.239.173.80 -p 2522
-```
-
-然后在**自己电脑的浏览器**打开上述 URL。Dashboard 当前有 7 个分区、34 个可视化面板，并用 5 个全局变量覆盖关键指标和全部 4387 个 metric；页面每 20 秒自动刷新。
+公司内网或 VPN 用户直接在浏览器打开即可，不需要 Demo 服务器账号、密码或 SSH。当前 dashboard 和指标数量见主流程第 1、8、9 节；不要使用本文历史段落中的旧数量判断当前状态。
 
 相关内容：
 
 - [13 个面板分别表示什么](#15-当前真实-grafana-dashboard)
-- [全部 4387 个 metric 的分类和逐条说明](#130-当前全部-pmt-metrics-在哪里)
+- [metric 分类和逐条说明（历史章节；当前数量以自动生成 catalog 为准）](#130-当前全部-pmt-metrics-在哪里)
 - [持续采集、Prometheus scrape 和 Grafana 刷新的区别](#85-这是不是持续监测)
 - [Grafana 无数据的排查方法](#175-grafana-页面打开但没有-panel)
 
@@ -2051,48 +2046,41 @@ sudo systemctl restart otelcol-pmt
 
 ---
 
-## 19. 当前遗留问题和下一步
+## 19. 当前状态和下一步
 
-### 19.1 部分 aggregator 没有 XML 映射
+### 19.1 GNR PUNIT XML 映射已解决
 
-当前已确认真实数据成功进入系统，但日志显示部分 GUID + Size 未找到 XML：
+2026-07-14 已切换到上传的 Intel PMT support metadata：
 
 ```text
-0x22491753, size 6272
-0x22806802, size 6784
+/root/projects/applications.manageability.intel-pmt.tools.python.support.intel-pmt-master/xml/pmt.xml
 ```
 
-下一步应：
+其中包含真实平台所需的精确映射：
 
-1. 从 BMC snapshot 收集所有唯一的 GUID + Size；
-2. 在 `xml/pmt.xml` 和相关 XML 文件中搜索；
-3. 确认是否缺少当前 GNR 平台 schema；
-4. 如果缺少，获取正确版本的 Intel PMT XML；
-5. 重新运行 Collector 并确认警告减少。
+- C-Die：`0x22806802 / 6784`；
+- IO-Die：`0x22491753 / 6272`。
 
-提取唯一 GUID + Size：
+离线 snapshot 的 36 个 aggregators 已全部 exact match，生产日志不再出现这两组 lookup failure。Collector 仍保持严格 GUID+Size lookup，没有启用 GUID-only fallback。
+
+生产检查：
 
 ```bash
-jq -r '.TelemetryData[] | [.Guid, .Size] | @tsv' \
-  /tmp/pmt-redfish-validation/snapshot.json \
-  | sort -u
+journalctl -u otelcol-pmt --since '-5 minutes' --no-pager \
+  | grep 'Failed to find XML set for aggregator'
+curl -fsS http://127.0.0.1:8889/metrics \
+  | grep '^fivr_health_monitor_' | head
 ```
 
-在 XML 中搜索 GUID：
-
-```bash
-grep -RniE '22491753|22806802' \
-  /root/projects/Intel-PMT/xml \
-  | head -n 50
-```
+FIVR 的 exact-schema 解码、poison 处理、两位状态拆分和带内交叉验证见 `docs/gnr-fivr-health-collection-workflow.md`。
 
 ### 19.2 Dashboard 已完成全面重构，下一步是告警和业务语义
 
-当前 Dashboard 已覆盖全 Core 温度、usage、三个 histogram、两种 throttle 窗口、RDT MBM/CMT、CHA、QAT、data-loss、设备拓扑和全部 metric explorer。下一步不应继续无差别堆图，而应：
+当前 Dashboard 已覆盖全 Core 温度、usage、三个 histogram、两种 throttle 窗口、RDT MBM/CMT、CHA、QAT、data-loss、设备拓扑、GNR FIVR Health 和全部 metric explorer。下一步不应继续无差别堆图，而应：
 
 - 和平台 owner 确认温度、latency、throttle 和 data-loss 的生产阈值；
 - 为关键状态建立 Grafana/Prometheus alert rules；
-- 补齐未映射 aggregator 后再加入新 metric family；
+- 取得 GNR FIVR 两位状态码 0/1/2/3 的权威枚举后增加语义化告警；
 - 为 BMC trigger/GET 成功率增加 Collector 自监控 metric；
 - 根据业务场景保存不同 dashboard view，例如 thermal、memory、failure triage；
 - 为大规模多 BMC 部署评估 recording rules，降低 Top-K 和动态正则查询成本。

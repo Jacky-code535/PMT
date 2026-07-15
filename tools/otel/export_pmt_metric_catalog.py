@@ -10,7 +10,10 @@ import urllib.request
 from collections import Counter
 from pathlib import Path
 
-METRICS_URL = "http://localhost:8889/metrics"
+METRICS_URLS = {
+    "redfish": "http://localhost:8889/metrics",
+    "local": "http://10.239.89.3:8889/metrics",
+}
 METADATA_URL = "http://localhost:9090/api/v1/metadata"
 OUTPUT_DIR = Path(__file__).resolve().parents[2] / "docs"
 CSV_PATH = OUTPUT_DIR / "pmt-metrics-catalog.csv"
@@ -50,35 +53,40 @@ def classify(name: str, help_text: str) -> str:
 
 
 def main() -> None:
-    exposition = fetch_text(METRICS_URL)
     metadata_payload = json.loads(fetch_text(METADATA_URL))
     metadata = metadata_payload.get("data", {})
 
     helps: dict[str, str] = {}
     types: dict[str, str] = {}
     series_counts: Counter[str] = Counter()
+    source_series_counts: dict[str, Counter[str]] = {
+        source: Counter() for source in METRICS_URLS
+    }
     label_names: dict[str, set[str]] = {}
     avc01_metrics: set[str] = set()
 
-    for line in exposition.splitlines():
-        directive = DIRECTIVE_RE.match(line)
-        if directive:
-            kind, name, value = directive.groups()
-            if kind == "HELP":
-                helps[name] = value
-            else:
-                types[name] = value
-            continue
+    for source, metrics_url in METRICS_URLS.items():
+        exposition = fetch_text(metrics_url)
+        for line in exposition.splitlines():
+            directive = DIRECTIVE_RE.match(line)
+            if directive:
+                kind, name, value = directive.groups()
+                if kind == "HELP":
+                    helps[name] = value
+                else:
+                    types[name] = value
+                continue
 
-        sample = SAMPLE_RE.match(line)
-        if not sample:
-            continue
-        name, labels_text = sample.groups()
-        if not labels_text or 'RedfishEndpoint="avc01"' not in labels_text:
-            continue
-        avc01_metrics.add(name)
-        series_counts[name] += 1
-        label_names.setdefault(name, set()).update(LABEL_NAME_RE.findall(labels_text))
+            sample = SAMPLE_RE.match(line)
+            if not sample:
+                continue
+            name, labels_text = sample.groups()
+            if not labels_text or 'PMTEndpoint="avc01"' not in labels_text:
+                continue
+            avc01_metrics.add(name)
+            series_counts[name] += 1
+            source_series_counts[source][name] += 1
+            label_names.setdefault(name, set()).update(LABEL_NAME_RE.findall(labels_text))
 
     rows = []
     for name in sorted(avc01_metrics):
@@ -94,6 +102,8 @@ def main() -> None:
                 "type": metric_type,
                 "unit": unit,
                 "series_count": series_counts[name],
+                "redfish_series_count": source_series_counts["redfish"][name],
+                "inband_series_count": source_series_counts["local"][name],
                 "label_names": ",".join(sorted(label_names.get(name, set()))),
                 "help": help_text or "No HELP text exposed; inspect the matching PMT XML definition.",
             }
@@ -109,6 +119,8 @@ def main() -> None:
     metric_types = Counter(row["type"] for row in rows)
     missing_help = sum(row["help"].startswith("No HELP") for row in rows)
     total_series = sum(row["series_count"] for row in rows)
+    redfish_series = sum(row["redfish_series_count"] for row in rows)
+    inband_series = sum(row["inband_series_count"] for row in rows)
 
     summary_lines = [
         "# avc01 Intel PMT Metrics 完整清单摘要",
@@ -119,6 +131,8 @@ def main() -> None:
         "",
         f"- PMT metric 名称数：**{len(rows)}**",
         f"- 当前 PMT time series 数：**{total_series}**",
+        f"  - BMC Redfish：**{redfish_series}**",
+        f"  - OS 带内：**{inband_series}**",
         f"- 缺少 HELP 说明的 metric 数：**{missing_help}**",
         "- 完整逐条说明：`docs/pmt-metrics-catalog.csv`",
         "",
@@ -147,6 +161,8 @@ def main() -> None:
         "| `type` | Prometheus metric 类型，例如 gauge/counter |",
         "| `unit` | Prometheus metadata 暴露的单位；为空时查 HELP/XML |",
         "| `series_count` | 当前这个名称因为不同 labels 产生的 time series 数量 |",
+        "| `redfish_series_count` | BMC Redfish exporter 中的 time series 数量 |",
+        "| `inband_series_count` | OS 带内 exporter 中的 time series 数量 |",
         "| `label_names` | 当前 exporter 中观察到的标签名 |",
         "| `help` | PMT XML/receiver 暴露的官方说明，即每条 metric 的主要含义 |",
         "",
