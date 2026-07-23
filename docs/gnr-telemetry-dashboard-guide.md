@@ -125,16 +125,21 @@ For a first-time viewer:
 | Platform endpoint | Logical monitored platform / 被监控平台 | `avc01` |
 | Collection path | `redfish` OOB or `local` in-band / 带外或带内 | `redfish` |
 | Socket | Prometheus `DeviceId`; `All` keeps platform context / Socket筛选 | `All` |
-| Core group | CORE Aggregator `AccessId`, not one Aggregator by itself / CORE Access分组 | `All` |
-| Local core slot | Slot 0–31 inside each selected CORE Aggregator / Aggregator内部局部编号 | `0` |
+| CORE Aggregator access | Selects `AccessId` values that contain GUID `0x22473996` / 选择包含CORE Aggregator的Access | `All` |
+| XML Core field | Selects the Core N field defined by the CORE XML HELP / 选择XML定义的Core N字段 | `0` |
 
-`Local core slot 0` is not Linux logical CPU 0. Friendly legends use:
+The legend first identifies the Aggregator with raw source labels, then uses the
+Core number exactly as the XML HELP describes it:
 
 ```text
-Socket <DeviceId> · Group A<AccessId> · Local <slot>
+AGG[D<DeviceId>/A<AccessId>/S<SourceId>] · Core <XML number>
 ```
 
-Raw labels remain available in panel inspection and Metric Explorer.
+For example, `AGG[D1/A248/S2] · Core 0` means that D1/A248/S2 locates the
+Aggregator instance and `Core 0` is the `C0_*` field inside that XML layout. It
+does not claim Linux CPU 0 or a globally numbered physical core. `AGG[...]` is
+Dashboard notation; `DeviceId`, `AccessId`, `SourceId`, `C0_TEMP` and the HELP
+text are the underlying source facts.
 
 ## 5. Time model / 三层时间模型
 
@@ -235,8 +240,8 @@ CPU-only NPB or PAMPAR workloads should be `Idle`.
 ### 7.2 Row 01 — Core Environment & Activity
 
 - **Current Thermal Hotspots** shows the 12 hottest valid local-slot series.
-- **Selected Local Slot Temperature** shows the selected slot across the
-  selected Socket/Core Group scope.
+- **Temperature for Core N** shows the `C<N>_TEMP` field across the selected
+  CORE Aggregator scope.
 - **PMT Relative Activity** applies `rate()` to the experimental U64.38.26
   counter and displays six decimals. It is not Linux CPU utilization percent.
 - **Throttle Events · Last 5 Minutes** shows the five-minute increase for both
@@ -366,7 +371,7 @@ is tested.
 | Mesh telemetry | GV and histogram-bin fields exist | Bin boundaries, unit and sampling semantics | Explorer/raw only |
 | Data-loss count | Incomplete internal processing-cycle counter and event timestamp | Total internal-cycle denominator and per-cycle missing-field count | No loss percentage |
 | Last-update timestamp | 25 MHz internal update timestamp | Calibrated mapping to wall-clock time | Use `changes()`, never display as date |
-| Core identity | Socket, Access group and local slot are known | Approved mapping to Linux logical CPU and physical core IDs | Friendly local labels; no Linux CPU claim |
+| Core identity | DeviceId/AccessId/SourceId locate an Aggregator; XML defines Core N fields | Approved mapping from each Aggregator Core N field to Linux logical CPU and physical core IDs | Use `AGG[D/A/S] · Core N`; no Linux CPU claim |
 | Firmware version | Raw image version field exists | Encoding format and release-name mapping | Provenance raw value |
 | QAT maximum latency | Maximum-latency fields exist | Reset/measurement-window semantics | Explorer only; never `rate(max)` |
 

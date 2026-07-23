@@ -142,7 +142,7 @@
       "targets": [
         {
           "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
-          "legendFormat": "{{CollectionMode}} · Socket {{DeviceId}} · A{{AccessId}}/S{{SourceId}}",
+          "legendFormat": "{{CollectionMode}} · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
           "refId": "A"
         }
       ]
@@ -277,12 +277,12 @@
       "targets": [
         {
           "expr": "rate({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])",
-          "legendFormat": "Counter rate/s · Socket {{DeviceId}} · A{{AccessId}}",
+          "legendFormat": "Counter rate/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
           "refId": "A"
         },
         {
           "expr": "delta({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300",
-          "legendFormat": "Gauge delta/s · Socket {{DeviceId}} · A{{AccessId}}",
+          "legendFormat": "Gauge delta/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
           "refId": "B"
         }
       ]

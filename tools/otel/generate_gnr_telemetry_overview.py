@@ -603,22 +603,22 @@ advance(8)
 # 02 — Core environment and activity
 row(
     "02 · Core Environment & Activity",
-    "Current thermal and relative activity signals. Local slots repeat inside each Core Aggregator and are not Linux CPU numbers.",
+    "Current thermal and relative activity fields. AGG[D/A/S] locates the Aggregator; Core N is the XML/HELP field number and is not a Linux CPU number.",
 )
 add_bar_gauge(
     "Current Thermal Hotspots",
-    "Top 12 valid local-slot temperatures now. Friendly labels retain Socket, Access group and local slot.",
+    "Top 12 valid current temperatures. AGG[D/A/S] identifies the source Aggregator, followed by the XML HELP core number.",
     0,
     12,
     10,
     f"topk(12,{core_temperature})",
-    "Socket {{DeviceId}} · Group A{{AccessId}} · Local {{core}}",
+    "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}}",
     unit="celsius",
     minimum=0,
 )
 add_timeseries(
-    "Selected Local Slot Temperature",
-    "Temperature history for the selected local slot across the selected Socket/Core Group scope; 0°C disabled placeholders are excluded.",
+    "Temperature for Core $local_core",
+    "Temperature history for XML field Core $local_core in each selected CORE Aggregator; 0°C disabled placeholders are excluded.",
     12,
     12,
     10,
@@ -626,7 +626,7 @@ add_timeseries(
         target(
             f'({{__name__=~".*_temp_c${{local_core}}_temp_celsius",'
             f"{core_scope}}} > 0)",
-            "Socket {{DeviceId}} · Group A{{AccessId}} · Local $local_core",
+            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core $local_core",
         )
     ],
     unit="celsius",
@@ -642,13 +642,13 @@ add_timeseries(
     [
         target(
             f"topk(12,clamp_min(rate({core_usage}[5m:]),0))",
-            "Top · Socket {{DeviceId}} · Group A{{AccessId}} · Local {{core}}",
+            "Top · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}}",
             "A",
         ),
         target(
             f'clamp_min(rate(c${{local_core}}_usage_meter_core_usage_total'
             f"{{{core_scope}}}[5m]),0)",
-            "Selected · Socket {{DeviceId}} · Group A{{AccessId}}",
+            "Selected · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core $local_core",
             "B",
         ),
     ],
@@ -674,7 +674,7 @@ add_bar_gauge(
     24,
     9,
     f"topk(16,{throttle})",
-    "Socket {{DeviceId}} · Group A{{AccessId}} · Local {{core}} · {{window}} cycles",
+    "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}} · {{window}} cycles",
     unit="short",
     minimum=0,
 )
@@ -684,7 +684,7 @@ advance(9)
 # 03 — Core operating profile
 row(
     "03 · Core Operating Profile",
-    "Windowed residency distributions for the selected local slot. These are normalized counter changes, not instantaneous readings.",
+    "Five-minute residency distributions for the selected XML Core field in the selected CORE Aggregator scope; these are not instantaneous readings.",
 )
 histogram_ranges = {
     "freq": [
@@ -799,13 +799,13 @@ add_timeseries(
         target(
             f'topk(12,clamp_min(rate(label_replace({mbm_total},'
             f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "Total · Socket {{DeviceId}} · A{{AccessId}}",
+            "Total · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
             "A",
         ),
         target(
             f'topk(12,clamp_min(rate(label_replace({mbm_local},'
             f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "Local · Socket {{DeviceId}} · A{{AccessId}}",
+            "Local · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
             "B",
         ),
     ],
@@ -822,7 +822,7 @@ add_timeseries(
         target(
             f'topk(12,clamp_min(rate(label_replace({cmt},'
             f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "Socket {{DeviceId}} · A{{AccessId}}",
+            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
         )
     ],
     unit="short",
@@ -842,7 +842,7 @@ add_timeseries(
         target(
             f'topk(16,abs(delta(label_replace({memory_raw},'
             f'"metric","$1","__name__","(.+)")[5m:])))',
-            "Socket {{DeviceId}} · A{{AccessId}} · {{metric}}",
+            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · {{metric}}",
         )
     ],
     unit="short",
@@ -902,7 +902,7 @@ add_timeseries(
         target(
             f'topk(16,abs(delta(label_replace({energy},'
             f'"metric","$1","__name__","(.+)")[5m:])))',
-            "Socket {{DeviceId}} · A{{AccessId}} · {{metric}}",
+            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · {{metric}}",
         )
     ],
     unit="short",
@@ -1024,7 +1024,7 @@ add_timeseries(
     [
         target(
             loss_labeled,
-            "{{source}} · Socket {{DeviceId}} · Group A{{AccessId}}",
+            "{{source}} · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
         )
     ],
     unit="short",
@@ -1156,7 +1156,7 @@ variables = [
     },
     {
         "name": "core_group",
-        "label": "Core group",
+        "label": "CORE Aggregator access",
         "type": "query",
         "datasource": DATASOURCE,
         "query": {
@@ -1179,7 +1179,7 @@ variables = [
     },
     {
         "name": "local_core",
-        "label": "Local core slot",
+        "label": "XML Core field",
         "type": "custom",
         "query": ",".join(str(index) for index in range(32)),
         "options": [],
@@ -1310,7 +1310,7 @@ add_timeseries(
     [
         target(
             explorer_selector,
-            "{{CollectionMode}} · Socket {{DeviceId}} · A{{AccessId}}/S{{SourceId}}",
+            "{{CollectionMode}} · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
         )
     ],
     unit="short",
@@ -1334,12 +1334,12 @@ add_timeseries(
     [
         target(
             f"rate({explorer_selector}[5m])",
-            "Counter rate/s · Socket {{DeviceId}} · A{{AccessId}}",
+            "Counter rate/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
             "A",
         ),
         target(
             f"delta({explorer_selector}[5m])/300",
-            "Gauge delta/s · Socket {{DeviceId}} · A{{AccessId}}",
+            "Gauge delta/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
             "B",
         ),
     ],
