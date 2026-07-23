@@ -63,9 +63,9 @@ OOB D/A/S
 
 | Family | 当前展示 | 需要确认 |
 |---|---|---|
-| Core relative usage | raw rate/s | 是否可转换为利用率/% |
-| RDT MBM | raw transactions/s | transaction size及local/total定义 |
-| RDT CMT | raw rate | cache-line到bytes转换 |
+| Core usage | 5分钟transformed counter增量 | 是否可转换为利用率/% |
+| RDT MBM | 5分钟memory transaction增量 | transaction size及local/total定义 |
+| RDT CMT | current LLC cache-line usage raw value | 物理单位，以及XML Snapshot与Prometheus `_total`命名的差异 |
 | Memory channel | raw delta | scale、time base及带宽公式 |
 | Accumulated energy | raw delta | joule scale及wrap/reset |
 | C-state | raw | 单位和counter/gauge生命周期 |
