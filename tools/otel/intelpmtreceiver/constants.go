@@ -32,6 +32,9 @@ const (
 
 // Compiled regexes.
 var (
-	ReservedRegex = regexp.MustCompile(`RESERVED|RSVD`)
-	HexToDecRegex = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
+	ReservedRegex          = regexp.MustCompile(`RESERVED|RSVD`)
+	HexToDecRegex          = regexp.MustCompile(`0[xX][0-9a-fA-F]+`)
+	FullWidthUint64AndMask = regexp.MustCompile(
+		`\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*&\s*(?:0[xX][fF]{16}|18446744073709551615)\s*\)`,
+	)
 )

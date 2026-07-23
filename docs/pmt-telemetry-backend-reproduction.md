@@ -63,7 +63,7 @@ http://10.112.227.52/d/pmt-avc01-redfish
 4. receiver 读取 Guid 和 Size，用它们在 pmt.xml 中找正确 XMLSet
 5. XML 告诉 receiver：字段在哪些 bit、是什么数据类型、使用什么转换公式
 6. receiver 得到 OpenTelemetry metric：
-  c0_c1_c2_c3_temp_c0_temp_celcius = 44
+  c0_c1_c2_c3_temp_c0_temp_celsius = 44
 7. Prometheus exporter 在 localhost:8889/metrics 暴露该值
 8. Prometheus 抓取后保存：时间戳 + metric 名 + labels + 44
 9. Grafana 用 PromQL 查询并显示 44°C 和历史曲线
@@ -72,7 +72,7 @@ http://10.112.227.52/d/pmt-avc01-redfish
 最终看到的一个时间序列样本可以抽象为：
 
 ```text
-metric name: c0_c1_c2_c3_temp_c0_temp_celcius
+metric name: c0_c1_c2_c3_temp_c0_temp_celsius
 labels:      RedfishEndpoint="avc01", DeviceId="0", AccessId="25", ...
 timestamp:   Prometheus 抓取该值的时间
 value:       46.5
@@ -175,8 +175,8 @@ TelemetryData aggregators:   36
 当前真实 PMT 数据结果：
 
 ```text
-Prometheus 中真实 metric 名称约 4914 个
-Collector 每轮处理约 27126 个真实 PMT data points
+Prometheus 中真实 PMT metric 名称为 5285 个
+Collector 每轮处理 32710 个单来源 PMT data points
 Prometheus up{job="otel-pmt"} = 1
 ```
 
@@ -745,15 +745,15 @@ receivers:
 当前真实日志已经证明它在持续运行：
 
 ```text
-08:39:49  Metrics: 27126, data points: 27126
-08:40:08  Metrics: 27126, data points: 27126
+历史构建日志示例：Metrics: 27126, data points: 27126
+当前生产构建：Metrics: 32710, data points: 32710
 ```
 
 两轮之间约 20 秒。只要 `otelcol-pmt` systemd 服务保持 active，这个循环就不会因为一次 snapshot 完成而退出。
 
 选择 20 秒是当前 MVP 的工程折中：
 
-- 每轮会处理约 27,126 个数据点，不是一个很小的请求；
+- 当前每个采集来源每轮会处理 32,710 个数据点，不是一个很小的请求；
 - BMC 需要时间生成 snapshot；
 - 更短间隔会增加 BMC、网络、Collector、Prometheus 的 CPU、内存和存储压力；
 - 温度和健康趋势通常不要求毫秒级采样；
@@ -811,7 +811,7 @@ curl http://localhost:8889/metrics
 `debug` exporter 将 OTel metrics 数量写入 Collector 日志，适合确认 pipeline 是否实际处理了数据：
 
 ```text
-Metrics ... resource metrics: 1, metrics: 27126, data points: 27126
+Metrics ... resource metrics: 1, metrics: 32710, data points: 32710
 ```
 
 ### 8.4 Pipeline
@@ -900,7 +900,7 @@ journalctl -u otelcol-pmt -f \
 或者在 Grafana/Prometheus 查询某条真实 metric 最近 10 分钟的数据：
 
 ```promql
-c0_c1_c2_c3_temp_c0_temp_celcius{RedfishEndpoint="avc01"}
+c0_c1_c2_c3_temp_c0_temp_celsius{PMTEndpoint="avc01",CollectionMode="redfish"}
 ```
 
 还可以检查：
@@ -1298,14 +1298,14 @@ curl -fsS http://localhost:9090/api/v1/targets \
 当前已经验证过的温度 metric：
 
 ```promql
-c0_c1_c2_c3_temp_c0_temp_celcius{RedfishEndpoint="avc01"}
+c0_c1_c2_c3_temp_c0_temp_celsius{PMTEndpoint="avc01",CollectionMode="redfish"}
 ```
 
 命令行查询：
 
 ```bash
 curl -fsS --get \
-  --data-urlencode 'query=c0_c1_c2_c3_temp_c0_temp_celcius{RedfishEndpoint="avc01"}' \
+  --data-urlencode 'query=c0_c1_c2_c3_temp_c0_temp_celsius{PMTEndpoint="avc01",CollectionMode="redfish"}' \
   http://localhost:9090/api/v1/query | jq
 ```
 
@@ -1359,22 +1359,25 @@ curl -fsS http://localhost:8889/metrics \
 当前 `avc01` 实际暴露：
 
 ```text
-4387 个 PMT metric 名称
-27126 条当前 PMT time series
+每个采集来源 5285 个 PMT metric 名称
+每个采集来源 32710 条当前 PMT time series
+Redfish + Local 合计 65420 条当前 time series
 ```
 
-这里严格过滤了：
+这里必须按公共标签过滤来源：
 
 ```text
-RedfishEndpoint="avc01"
+PMTEndpoint="avc01", CollectionMode="redfish|local"
 ```
 
 因此没有把 Prometheus 自身、node-exporter 或 apt 等非 PMT metrics 混进来。
 
-所有 4387 个 metric 的逐条清单已经自动导出：
+所有 5285 个 metric 的逐条清单已经自动导出：
 
 - [完整 CSV：每个 metric 一行](pmt-metrics-catalog.csv)
-- [中文分类摘要](pmt-metrics-summary.md)
+- [初学者分类、类型与单位摘要](pmt-metrics-summary.md)
+- [全部38个metric family详细语义、查询与风险边界](pmt-metric-family-reference.md)
+- [CPU/Core/36 个 aggregator 拓扑](pmt-platform-topology.md)
 - [导出工具](../tools/otel/export_pmt_metric_catalog.py)
 
 CSV 每一行都包含：
@@ -1383,35 +1386,19 @@ CSV 每一行都包含：
 |---|---|
 | `metric_name` | Prometheus 中可直接查询的准确名称 |
 | `category` | 按名称和 HELP 自动归类 |
+| `family_id` / `family_title` | 人工审核的metric family稳定标识和人读名称 |
 | `type` | `gauge` 或 `counter` |
-| `unit` | Prometheus metadata 中的单位；为空时看 HELP/XML |
+| `unit` | Prometheus metadata 或标准 metric 后缀给出的单位；为空时看 HELP/XML |
+| `unit_source` | `prometheus_metadata`、`metric_name_suffix` 或 `unspecified` |
+| `value_semantics` | 当前值、累计值、时间戳、状态码或驻留bucket应怎样理解 |
+| `recommended_query` | 建议直接查询、rate/increase、归一化或配对计算 |
+| `caveat` | disabled、Idle、poison、未知单位和局部编号等误读边界 |
 | `series_count` | 当前该名称产生了多少条不同 labels 的 series |
+| `redfish_series_count` / `inband_series_count` | 两条采集来源分别有多少 series |
 | `label_names` | 当前观察到的全部标签名 |
 | `help` | receiver/XML 暴露的官方含义说明 |
 
-当前全部 4387 个 metric 都有 HELP，缺失说明数量为 0。按自动分类统计：
-
-| 类别 | metric 名称数 |
-|---|---:|
-| 内存 | 1051 |
-| 温度 | 832 |
-| 频率 | 769 |
-| 电压 | 768 |
-| Usage/Residency | 576 |
-| 状态与配置 | 142 |
-| Throttle | 128 |
-| Cache/CHA | 64 |
-| 其他 | 29 |
-| Latency | 22 |
-| Interconnect/I/O | 4 |
-| Data loss | 2 |
-
-按 Prometheus 类型：
-
-```text
-counter: 2368
-gauge:   2019
-```
+当前全部5285个metric都有HELP，缺失说明数量为0；4447个是counter，838个是gauge，全部归入38个人工解释family且未归类数量为0。13个类别与单位覆盖率由`pmt-metrics-summary.md`汇总；逐family含义、数值语义、正确PromQL读法和风险边界由`pmt-metric-family-reference.md`生成，此处不再复制容易过期的统计表。
 
 重新生成清单：
 
@@ -1436,13 +1423,13 @@ cd /root/projects/Intel-PMT
 | `Data` | 编码字符串 | 原始二进制 telemetry payload，不适合人工直接阅读 |
 | `attributes` | key-value map | DeviceId、AccessId、SourceType 等来源信息 |
 
-当前一次 snapshot 有 36 个 aggregators。36 不等于 36 个最终指标；一个 aggregator 可以根据 XML 解码出大量 samples，所以一轮最后得到约 27,126 个 data points。
+当前一次 snapshot 有 36 个 aggregators。36 不等于 36 个最终指标；一个 aggregator 可以根据 XML 解码出大量 samples，所以一轮最后得到 32,710 个单来源 data points。
 
 #### 第二层：OpenTelemetry metric
 
 Receiver 解码后创建 OTel metric。一个 metric 通常包括：
 
-- name：例如 `c0_c1_c2_c3_temp_c0_temp_celcius`；
+- name：例如 `c0_c1_c2_c3_temp_c0_temp_celsius`；
 - description：来自 XML，说明它是什么；
 - unit：例如温度、秒、计数或无量纲；
 - data point value：例如 `44`；
@@ -1466,7 +1453,7 @@ time series identity = metric name + 完整 labels 集合
 sample               = timestamp + numeric value
 ```
 
-例如同一个温度 metric，因为 `AccessId` 不同，会有多条曲线。这也是为什么“约 4914 个 metric 名称”不等于只有 4914 条 series；每个名称可以因为 labels 组合产生多条 series。
+例如同一个温度 metric，因为 `AccessId` 不同，会有多条曲线。这也是为什么 5,285 个 metric 名称会形成单来源 32,710 条 series；每个名称可以因为 labels 组合产生多条 series。
 
 ### 13.0.2 如何查看官方 description，而不是只猜名字
 
@@ -1482,7 +1469,7 @@ curl -fsS http://localhost:8889/metrics \
 
 ```bash
 curl -fsS http://localhost:8889/metrics \
-  | grep -E '^# (HELP|TYPE) c0_c1_c2_c3_temp_c0_temp_celcius '
+  | grep -E '^# (HELP|TYPE) c0_c1_c2_c3_temp_c0_temp_celsius '
 ```
 
 不要仅凭自动生成的 metric name 判断物理意义。优先级应是：
@@ -1496,7 +1483,7 @@ curl -fsS http://localhost:8889/metrics \
 示例：
 
 ```text
-c0_c1_c2_c3_temp_c0_temp_celcius
+c0_c1_c2_c3_temp_c0_temp_celsius
 ```
 
 当前官方 HELP：
@@ -1598,8 +1585,8 @@ Counter indicating number of times core 0 was throttled in last 64 cycles window
 示例：
 
 ```text
-agg_data_loss_count_agg_data_loss_count
-agg_data_loss_timestamp_agg_data_loss_timestamp
+agg_data_loss_count_total
+agg_data_loss_timestamp_total
 ```
 
 当前官方 HELP 表明：
@@ -1616,7 +1603,7 @@ agg_data_loss_timestamp:
 注意：`data_loss_count` 是运行累计值，绝对值非零不一定代表“此刻正在丢数据”。更有意义的是观察它是否继续增长：
 
 ```promql
-increase(agg_data_loss_count_agg_data_loss_count{RedfishEndpoint="avc01"}[5m])
+increase(agg_data_loss_count_total{PMTEndpoint="avc01",CollectionMode="redfish"}[5m])
 ```
 
 如果结果大于 0，表示最近 5 分钟发生了新增 data-loss cycle。
@@ -1741,29 +1728,32 @@ Grafana provisioning 文件：
 /etc/grafana/provisioning/dashboards/pmt-backend-test.yml
 ```
 
-当前 dashboard 有 41 个 JSON panel entries，其中 7 个是分区标题、34 个是实际可视化面板：
+当前客户演示dashboard有34个JSON panel entries，其中8个是分区标题、26个是实际可视化面板：
 
 | 分区 | 主要内容 |
 |---|---|
-| Fleet health / 采集总览 | Collector、series 数、metric 名称数、scrape age、最高温度、data loss、scrape duration |
-| Thermal / 全 Core 热状态 | 当前最热 32 cores、Top 20 历史、最高/平均/最低热包络、选定 core 温度 |
+| Customer Demo Overview | 三张清晰状态卡：PMT Demo Status、Highest Core Temperature、C-Die FIVR Monitor；下方只保留CPU温度趋势 |
+| FIVR Health & Diagnostics | C-Die 总体状态、非零 slot 数、IO-Die availability、非零位置定位表 |
+| Thermal / Core 温度 | 当前最热 cores、历史趋势、最高/平均/最低热包络、选定 core 温度 |
 | Core activity & throttling | Core usage 变化率、选定 core usage、64/1024-cycle throttle |
-| Selected Core histograms | 任意 core 的频率、温度和电压 bucket 驻留变化率 |
-| Memory, CHA & accelerator | RDT MBM local/total、RDT CMT、CHA enable、QAT bandwidth 和 latency |
-| Inventory & collection quality | PMT source 拓扑、data-loss count/timestamp、core enable 和新增 data loss |
-| Metric Explorer | 从 4387 个名称中搜索任意 metric，查看历史、当前 labels、`rate()` 和 `delta()` |
+| Core operating residency | 任意局部core在可选2m–1h窗口中的频率、温度和电压bucket驻留占比 |
+| Memory & Accelerator | RDT MBM transaction rate、QAT throughput 和 latency |
+| Technical Diagnostics | PMT source拓扑；data-loss历史count、15分钟新增量和内部timestamp |
+| Advanced Metric Explorer | 链接到独立搜索dashboard，避免客户主页顶部长期显示技术搜索框 |
 
-顶部有 5 个全局变量：
+顶部有 7 个全局变量：
 
 | 变量 | 作用 |
 |---|---|
-| Endpoint | 选择 BMC/Redfish endpoint |
+| Endpoint | 选择 PMT endpoint |
+| Collection mode | 选择 Redfish、Local 或两者 |
 | Device | 单选、多选或查看所有 DeviceId |
 | Access | 单选、多选或查看所有 AccessId |
+| PMT GUID / Die | 按 aggregator GUID 过滤数据域 |
 | Core | 在温度、usage 和三个 histogram 面板中选择 core 0–127 |
-| Metric (search all) | 搜索并绘制任意一个 PMT metric |
+| 05 Residency window | 只控制第05栏驻留分布，选择2m、5m、10m、15m、30m或1h |
 
-关键指标使用专用图表和正确单位；不适合同时绘制的数千条长尾 metrics 由 Metric Explorer 完整覆盖。这样既全面，又避免一次渲染 27126 条 series 造成浏览器卡顿。
+Grafana原生dashboard variable只能位于页面顶部，不能移动到某个row。为保持客户主页清晰，`Metric (search all)`已从主dashboard移除。独立`Intel PMT · Advanced Metric Explorer`使用6个变量（Endpoint、Collection mode、Device、Access、PMT GUID/Die、Search metric），搜索框位于页面顶部，结果面板紧随其后。默认只选Redfish，避免把两条来源的65,420条series重复聚合。
 
 dashboard 配置为：
 
@@ -1773,7 +1763,7 @@ dashboard 配置为：
 
 因此浏览器打开 dashboard 时，每 20 秒重新查询 Prometheus。底层 PMT receiver 同时每 20 秒采集一次，Prometheus 每 15 秒 scrape 一次。三层都在持续运行。
 
-当前 38 个 PromQL targets 已逐条向 Prometheus 实测，全部查询成功；Dashboard 也已在 Grafana 浏览器中完成渲染检查。注意：dashboard 自动刷新不能替代底层采集；判断 BMC 周期是否持续执行还应查看：
+当前客户dashboard的29个PromQL targets和Explorer的4个targets已逐条向Prometheus实测，全部查询成功；两个provisioned dashboards也均已由Grafana API加载。注意：dashboard自动刷新不能替代底层采集；判断BMC周期是否持续执行还应查看：
 
 ```bash
 journalctl -u otelcol-pmt -f \
@@ -1783,7 +1773,7 @@ journalctl -u otelcol-pmt -f \
 正常情况下约每 20 秒看到一轮：
 
 ```text
-metrics: 27126, data points: 27126
+metrics: 32710, data points: 32710
 ```
 
 打开 Grafana：
@@ -2211,7 +2201,7 @@ curl -fsS --get \
 
 ```bash
 curl -fsS --get \
-  --data-urlencode 'query=c0_c1_c2_c3_temp_c0_temp_celcius{RedfishEndpoint="avc01"}' \
+  --data-urlencode 'query=c0_c1_c2_c3_temp_c0_temp_celsius{PMTEndpoint="avc01",CollectionMode="redfish"}' \
   http://localhost:9090/api/v1/query | jq
 ```
 

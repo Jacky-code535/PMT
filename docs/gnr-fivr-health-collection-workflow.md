@@ -24,7 +24,7 @@ BMC 和 avc01 OS 暴露相同的 GUID、size 和 FIVR 字节值。因此：
 - C-Die 的三个 FIVR monitor 当前均为 0；
 - IO-Die 的三个 monitor 当前均为 `0xdeadbeefdeadbeef`；
 - `DEADBEEF` 是明显的 debug/data-unavailable sentinel，不是合理的 packed FIVR 状态，不得解释为硬件故障状态；
-- XML 只说明“2 bits per FIVR”，未提供 slot 对应的 rail 名称，也未提供 0/1/2/3 的权威状态枚举，因此不能擅自命名 Healthy/Warning/Fault。
+- XML 只说明“2 bits per FIVR”，未提供 slot 对应的 rail 名称，也未提供 0/1/2/3 的权威状态枚举。当前管理层 dashboard 采用项目运营约定：C-Die 全 0 且数据可用时显示 Healthy；该显示不等同于 XML 官方枚举。
 
 ### 1.1 “无法解析”的准确原因
 
@@ -38,7 +38,7 @@ BMC 和 avc01 OS 暴露相同的 GUID、size 和 FIVR 字节值。因此：
 
 因此当前能做出的最强、且不会误导客户的结论是：
 
-- **C-Die：所有公开 packed fields 均为 0。** 由于 metadata 没有 codebook，不能仅凭本仓库把 0 正式命名为 Healthy；
+- **C-Die：所有公开 packed fields 均为 0。** Dashboard 按当前项目约定显示 Healthy，但 metadata 没有 codebook，因此该名称不是平台规范结论；
 - **IO-Die：FIVR 状态不可用。** DEADBEEF 是 sentinel，不能拆成 2-bit 状态后解释；
 - 若需要 rail 级 Healthy/Warning/Fault，必须向 GNR PUNIT/FIVR firmware owner 获取内部 register/BXML codebook，或要求 Intel-PMT metadata 补充 bitfield 和枚举定义。
 
@@ -221,14 +221,12 @@ sudo systemctl restart grafana-server
 
 FIVR section 包含：
 
-- C-Die packed words 等于 `0x0` 的实测比例；
-- C-Die 非零 2-bit slots 数量；
-- IO-Die words 等于 `DEADBEEF` sentinel 的实测比例；
-- 每个 die/source 的 packed-word availability；
-- metadata 已提供和仍缺失的语义定义说明；
-- `PMT GUID / Die` 全局筛选器。
+- 客户总览只保留一张简明`C-Die FIVR Monitor`卡；完整信息位于独立`FIVR Health & Diagnostics` row；
+- C-Die 总体 `Healthy`/`Unhealthy`、非零 slot 数量和 IO-Die `DEADBEEF` 数据状态；
+- 只在检测到非零码时显示的定位表，列出 C-Die instance、Access、monitor、slot、code 和 CollectionMode；
+- 技术人员仍可通过`PMT GUID / Die`筛选器和独立`Advanced Metric Explorer`查询底层series。
 
-当前 dashboard 为 8 rows、47 panels、75 个 PromQL targets；全部新增 FIVR query 已通过 Prometheus API 验证并返回 live series。
+当前客户dashboard为8 rows、34个dashboard entries（26个可视化panel）、29个PromQL targets。当前默认Redfish数据下，C-Die总体查询返回`Healthy`，非零数量返回0，IO-Die返回`DEADBEEF`，非零定位表为空；空表是正常结果，表示没有检测到非零slot。
 
 ## 9. Metric catalog
 
@@ -302,7 +300,7 @@ avc01 实测 BMC 与 OS 的 raw word 一致：C-Die 为 0，IO-Die 为 `DEADBEEF
 2. **Data available**：raw 是真实 packed word，而不是 `DEADBEEF` sentinel；
 3. **Health semantic**：两位码的 0/1/2/3 已由平台规格定义。
 
-当前已完成 schema 解析和逐 word availability 判定：每个 C-Die instance 的 96 个 packed slots 全为 0，IO-Die 数据不可用。第三层仍需 GNR FIVR 状态枚举文档确认；在权威枚举确认前，不应把 code 0/1/2/3 自定义为 Healthy/Warning/Fault/Reserved。
+当前已完成 schema 解析和逐 word availability 判定：每个 C-Die instance 的 96 个 packed slots 全为 0，IO-Die 数据不可用。独立 FIVR 诊断区按项目运营约定把“C-Die 数据可用且全部 code=0”显示为 `Healthy`，任一 code 非零时显示 `Unhealthy` 并定位到 instance、monitor 和 slot；它只能指出 packed bitfield 的逻辑位置，不能指出具体 rail/core。IO-Die 明确显示 `DEADBEEF`。第三层的正式平台语义仍需 GNR FIVR 状态枚举和 slot 映射文档确认。
 
 ## 12. 回滚
 

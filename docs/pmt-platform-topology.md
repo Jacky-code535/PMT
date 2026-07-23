@@ -294,6 +294,17 @@ DeviceId + AccessId + monitor + slot + code + CollectionMode
 
 ## 8. Local 与 Redfish 如何对应
 
+Dashboard当前按访问路径明确区分locator：
+
+```text
+Redfish: AGG[D1/A248/S2] · Core 0
+Local:   AGG[telem0] · Core 0
+```
+
+OOB的`D/A/S`与Local的`host/telemN`是两套不同命名空间。它们各自可以定位到一条
+采集路径中的实例。Local图例省略已由顶部`Platform endpoint`筛选器显示的hostname，
+locator形状也已经可以区分路径，所以Dashboard不再增加冗余的host、`OOB`和`LOCAL`
+前缀。但当前不能仅凭名称证明两者是同一个物理Aggregator。
 
 | 维度               | Redfish          | Local            |
 | ---------------- | ---------------- | ---------------- |
@@ -308,7 +319,7 @@ DeviceId + AccessId + monitor + slot + code + CollectionMode
 | Time series      | 32,710           | 32,710           |
 
 
-两侧使用同一 `(GUID, Size)` XML 解码，并已对 FIVR raw word 验证一致。但仓库当前没有静态的 `Redfish AccessId ↔ Local telemX` 对照表，所以不能靠 AccessId 字符串直接一一配对。
+两侧使用同一 `(GUID, Size)` XML 解码，并已对 FIVR raw word 验证一致。但仓库当前没有经过物理发现验证的 `Redfish D/A/S ↔ Local host/telemX` 对照表，所以不能靠 AccessId 字符串或枚举顺序直接一一配对。完整缺口、证据要求和验收标准见 `pmt-unresolved-work.md`。
 
 可靠的交叉验证顺序是：
 

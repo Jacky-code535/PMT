@@ -3,14 +3,21 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
 
 DATASOURCE = {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
-REPO_OUTPUT = Path(__file__).parent / "dashboards" / "pmt-gnr-telemetry-overview.json"
+REPO_OUTPUT = Path(__file__).parent / "dashboards" / "pmt-gnr-redfish-overview.json"
 SYSTEM_OUTPUT = Path(
-    "/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-telemetry-overview.json"
+    "/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-redfish-overview.json"
+)
+REPO_LOCAL_OUTPUT = (
+    Path(__file__).parent / "dashboards" / "pmt-gnr-local-overview.json"
+)
+SYSTEM_LOCAL_OUTPUT = Path(
+    "/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-local-overview.json"
 )
 REPO_EXPLORER_OUTPUT = (
     Path(__file__).parent / "dashboards" / "pmt-gnr-metric-explorer.json"
@@ -18,7 +25,6 @@ REPO_EXPLORER_OUTPUT = (
 SYSTEM_EXPLORER_OUTPUT = Path(
     "/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-metric-explorer.json"
 )
-
 panels: list[dict] = []
 panel_id = 0
 y = 0
@@ -384,11 +390,42 @@ def status_mapping(options: dict[str, tuple[str, str]]) -> list[dict]:
     ]
 
 
-scope = 'PMTEndpoint="$endpoint",CollectionMode="$path",DeviceId=~"$socket"'
-core_scope = (
-    f'{scope},AccessId=~"$core_group",PMTGuid="0x22473996"'
-)
-all_paths_scope = 'PMTEndpoint="$endpoint",DeviceId=~"$socket"'
+def with_aggregator_display(expr: str) -> str:
+    """Attach a path-aware agg_display label to an expression result."""
+    oob = (
+        f"({expr}) and on(CollectionMode) "
+        f'count by (CollectionMode) ({{PMTEndpoint="$endpoint",'
+        f'CollectionMode="redfish"}})'
+    )
+    oob = (
+        f'label_replace(label_replace(label_replace({oob},'
+        f'"agg_d","D$1","DeviceId","(.+)"),'
+        f'"agg_a","A$1","AccessId","(.+)"),'
+        f'"agg_s","S$1","SourceId","(.+)")'
+    )
+    oob = (
+        f'label_join({oob},"agg_locator","/","agg_d","agg_a","agg_s")'
+    )
+    oob = (
+        f'label_replace({oob},"agg_display","AGG[$1]",'
+        f'"agg_locator","(.+)")'
+    )
+
+    local = (
+        f"({expr}) and on(CollectionMode) "
+        f'count by (CollectionMode) ({{PMTEndpoint="$endpoint",'
+        f'CollectionMode="local"}})'
+    )
+    local = (
+        f'label_replace({local},"agg_display","AGG[$1]",'
+        f'"AccessId","(.+)")'
+    )
+    return f"({oob}) or ({local})"
+
+
+scope = 'PMTEndpoint="$endpoint",CollectionMode="$path"'
+core_scope = f'{scope},PMTGuid="0x22473996"'
+all_paths_scope = 'PMTEndpoint="$endpoint"'
 
 temperature = f'{{__name__=~".*_temp_c[0-9]+_temp_celsius",{core_scope}}}'
 valid_temperature = f"({temperature} > 0)"
@@ -603,53 +640,48 @@ advance(8)
 # 02 — Core environment and activity
 row(
     "02 · Core Environment & Activity",
-    "Current thermal and relative activity fields. AGG[D/A/S] locates the Aggregator; Core N is the XML/HELP field number and is not a Linux CPU number.",
+    "Core temperatures, relative activity and throttle events.",
 )
 add_bar_gauge(
-    "Current Thermal Hotspots",
-    "Top 12 valid current temperatures. AGG[D/A/S] identifies the source Aggregator, followed by the XML HELP core number.",
+    "Top 12 Core Temperatures",
+    "Current valid temperatures by Core.",
     0,
-    12,
-    10,
-    f"topk(12,{core_temperature})",
-    "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}}",
+    24,
+    9,
+    with_aggregator_display(f"topk(12,{core_temperature})"),
+    "{{agg_display}} · Core {{core}}",
     unit="celsius",
     minimum=0,
 )
+advance(9)
 add_timeseries(
-    "Temperature for Core $local_core",
-    "Temperature history for XML field Core $local_core in each selected CORE Aggregator; 0°C disabled placeholders are excluded.",
-    12,
-    12,
-    10,
-    [
-        target(
-            f'({{__name__=~".*_temp_c${{local_core}}_temp_celsius",'
-            f"{core_scope}}} > 0)",
-            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core $local_core",
-        )
-    ],
-    unit="celsius",
-    minimum=0,
-)
-advance(10)
-add_timeseries(
-    "PMT Relative Activity",
-    "Rate of the experimental U64.38.26 relative-usage counter. Six decimal places are retained; this is not CPU utilization percent.",
+    "Maximum Core Temperature Trend",
+    "Highest valid Core temperature over time.",
     0,
     24,
     9,
     [
         target(
-            f"topk(12,clamp_min(rate({core_usage}[5m:]),0))",
-            "Top · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}}",
-            "A",
-        ),
+            f"max({core_temperature})",
+            "Maximum Core Temperature",
+        )
+    ],
+    unit="celsius",
+    minimum=0,
+)
+advance(9)
+add_timeseries(
+    "PMT Relative Activity",
+    "Top per-Core rates of the experimental U64.38.26 relative-usage counter. Six decimal places are retained; this is not CPU utilization percent.",
+    0,
+    24,
+    9,
+    [
         target(
-            f'clamp_min(rate(c${{local_core}}_usage_meter_core_usage_total'
-            f"{{{core_scope}}}[5m]),0)",
-            "Selected · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core $local_core",
-            "B",
+            with_aggregator_display(
+                f"topk(12,clamp_min(rate({core_usage}[5m:]),0))"
+            ),
+            "Top · {{agg_display}} · Core {{core}}",
         ),
     ],
     unit="short",
@@ -673,12 +705,23 @@ add_bar_gauge(
     0,
     24,
     9,
-    f"topk(16,{throttle})",
-    "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · Core {{core}} · {{window}} cycles",
+    with_aggregator_display(f"topk(16,{throttle})"),
+    "{{agg_display}} · Core {{core}} · {{window}} cycles",
     unit="short",
     minimum=0,
 )
 advance(9)
+add_text(
+    "Open Exact Per-Core Analysis",
+    "For one Core's temperature, relative activity, throttle and all residency "
+    "profiles, open **[GNR Core Analysis]"
+    "(/d/pmt-gnr-core-analysis?var-endpoint=$endpoint&var-path=$path)**. "
+    "Its Core target selector is path-local and controls every panel there.",
+    0,
+    24,
+    3,
+)
+advance(3)
 
 
 # 03 — Core operating profile
@@ -797,15 +840,19 @@ add_timeseries(
     9,
     [
         target(
-            f'topk(12,clamp_min(rate(label_replace({mbm_total},'
-            f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "Total · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(
+                f'topk(12,clamp_min(rate(label_replace({mbm_total},'
+                f'"metric","$1","__name__","(.+)")[5m:]),0))'
+            ),
+            "Total · {{agg_display}}",
             "A",
         ),
         target(
-            f'topk(12,clamp_min(rate(label_replace({mbm_local},'
-            f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "Local · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(
+                f'topk(12,clamp_min(rate(label_replace({mbm_local},'
+                f'"metric","$1","__name__","(.+)")[5m:]),0))'
+            ),
+            "Local · {{agg_display}}",
             "B",
         ),
     ],
@@ -820,9 +867,11 @@ add_timeseries(
     9,
     [
         target(
-            f'topk(12,clamp_min(rate(label_replace({cmt},'
-            f'"metric","$1","__name__","(.+)")[5m:]),0))',
-            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(
+                f'topk(12,clamp_min(rate(label_replace({cmt},'
+                f'"metric","$1","__name__","(.+)")[5m:]),0))'
+            ),
+            "{{agg_display}}",
         )
     ],
     unit="short",
@@ -840,9 +889,11 @@ add_timeseries(
     9,
     [
         target(
-            f'topk(16,abs(delta(label_replace({memory_raw},'
-            f'"metric","$1","__name__","(.+)")[5m:])))',
-            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · {{metric}}",
+            with_aggregator_display(
+                f'topk(16,abs(delta(label_replace({memory_raw},'
+                f'"metric","$1","__name__","(.+)")[5m:])))'
+            ),
+            "{{agg_display}} · {{metric}}",
         )
     ],
     unit="short",
@@ -900,9 +951,11 @@ add_timeseries(
     9,
     [
         target(
-            f'topk(16,abs(delta(label_replace({energy},'
-            f'"metric","$1","__name__","(.+)")[5m:])))',
-            "AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}] · {{metric}}",
+            with_aggregator_display(
+                f'topk(16,abs(delta(label_replace({energy},'
+                f'"metric","$1","__name__","(.+)")[5m:])))'
+            ),
+            "{{agg_display}} · {{metric}}",
         )
     ],
     unit="short",
@@ -1023,8 +1076,8 @@ add_timeseries(
     9,
     [
         target(
-            loss_labeled,
-            "{{source}} · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(loss_labeled),
+            "{{source}} · {{agg_display}}",
         )
     ],
     unit="short",
@@ -1073,11 +1126,15 @@ for panel in panels:
         row_chunks.append([panel])
     else:
         row_chunks[-1].append(panel)
+row_chunks[2] = [
+    panel
+    for panel in row_chunks[2]
+    if panel["title"] != "Open Exact Per-Core Analysis"
+]
 
 ordered_chunks = [
     row_chunks[0],  # Customer overview
     row_chunks[2],  # Core environment
-    row_chunks[3],  # Operating profile
     row_chunks[4],  # Uncore/RDT/memory
     row_chunks[5],  # Power/FIVR
     row_chunks[6],  # Accelerator
@@ -1085,14 +1142,13 @@ ordered_chunks = [
     row_chunks[1],  # Technical inventory/topology
 ]
 ordered_titles = [
-    "00 · Customer Overview",
+    "00 · Overview",
     "01 · Core Environment & Activity",
-    "02 · Core Operating Profile",
-    "03 · Uncore, RDT & Memory",
-    "04 · Power Policy & FIVR",
-    "05 · Accelerator & I/O",
-    "06 · Data Trust & Provenance",
-    "07 · Technical Inventory & Topology",
+    "02 · Uncore, RDT & Memory",
+    "03 · Power Policy & FIVR",
+    "04 · Accelerator & I/O",
+    "05 · Data Trust & Provenance",
+    "06 · Technical Inventory & Topology",
 ]
 panels = []
 new_y = 0
@@ -1106,6 +1162,68 @@ for chunk, title_text in zip(ordered_chunks, ordered_titles, strict=True):
     chunk[0]["title"] = title_text
     panels.extend(chunk)
     new_y += chunk_height
+
+description_overrides = {
+    "00 · Overview": "PMT status, temperature, FIVR and QAT activity.",
+    "PMT Data": "Current PMT data availability and freshness.",
+    "Peak Core Temperature": "Highest current valid Core temperature.",
+    "C-Die FIVR": "Current C-Die FIVR operational status.",
+    "QAT Activity": "Current QAT traffic state.",
+    "01 · Core Environment & Activity": (
+        "Core temperatures, relative activity and throttle events."
+    ),
+    "Top 12 Core Temperatures": "Current valid temperatures by Core.",
+    "Maximum Core Temperature Trend": (
+        "Highest valid Core temperature over time."
+    ),
+    "PMT Relative Activity": "Highest current per-Core activity rates.",
+    "Throttle Events · Last 5 Minutes": (
+        "Highest five-minute throttle-event increases."
+    ),
+    "02 · Uncore, RDT & Memory": "RDT and memory telemetry.",
+    "RDT Memory Transaction Rates · Raw": (
+        "Total and local MBM counter rates by CHA and RMID."
+    ),
+    "RDT Cache Occupancy Activity · Raw": (
+        "CMT counter rates by CHA and RMID."
+    ),
+    "Memory Channel Counter Change · Raw": (
+        "Five-minute changes in memory-channel counters."
+    ),
+    "Enabled CHA Instances": "Current enabled CHA count.",
+    "03 · Power Policy & FIVR": "FIVR, energy and policy telemetry.",
+    "FIVR Operational Signals": "Current C-Die and IO-Die FIVR signals.",
+    "C-Die Non-Zero Slot Locator": "Current non-zero C-Die FIVR slots.",
+    "Accumulated Energy Change · Raw": (
+        "Five-minute changes in accumulated-energy fields."
+    ),
+    "EPB & PEM Policy Fields · Raw": "Current EPB and PEM fields.",
+    "04 · Accelerator & I/O": "QAT throughput, latency and activity.",
+    "QAT PCIe Throughput": "Current QAT PCIe throughput.",
+    "QAT Latency & Activity": "Current QAT latency and activity fields.",
+    "05 · Data Trust & Provenance": (
+        "Data freshness, update quality and path comparison."
+    ),
+    "Data Freshness": "Age of the newest PMT sample.",
+    "Update Quality": "Recent Aggregator update quality.",
+    "Incomplete Aggregator Update Cycles": (
+        "Five-minute increase by Aggregator."
+    ),
+    "Path Parity & Update Heartbeat": (
+        "Redfish and Local inventory and update comparison."
+    ),
+    "06 · Technical Inventory & Topology": (
+        "Aggregator inventory, platform identity and topology."
+    ),
+    "Aggregator & Series Inventory": (
+        "Current series count by Aggregator instance."
+    ),
+    "Platform Identity & Firmware": "Current platform identity fields.",
+    "Enabled Topology Signals": "Current enabled topology fields.",
+}
+for panel in panels:
+    if panel["title"] in description_overrides:
+        panel["description"] = description_overrides[panel["title"]]
 
 
 variables = [
@@ -1136,54 +1254,6 @@ variables = [
         "refresh": 1,
         "sort": 1,
         "current": {"selected": True, "text": "redfish", "value": "redfish"},
-    },
-    {
-        "name": "socket",
-        "label": "Socket",
-        "type": "query",
-        "datasource": DATASOURCE,
-        "query": {
-            "query": 'label_values({PMTEndpoint="$endpoint",CollectionMode="$path"},DeviceId)',
-            "refId": "PrometheusVariableQueryEditor-Socket",
-        },
-        "definition": 'label_values({PMTEndpoint="$endpoint",CollectionMode="$path"},DeviceId)',
-        "refresh": 1,
-        "sort": 3,
-        "includeAll": True,
-        "allValue": ".*",
-        "multi": True,
-        "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
-    },
-    {
-        "name": "core_group",
-        "label": "CORE Aggregator access",
-        "type": "query",
-        "datasource": DATASOURCE,
-        "query": {
-            "query": (
-                'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-                'DeviceId=~"$socket",PMTGuid="0x22473996"},AccessId)'
-            ),
-            "refId": "PrometheusVariableQueryEditor-CoreGroup",
-        },
-        "definition": (
-            'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-            'DeviceId=~"$socket",PMTGuid="0x22473996"},AccessId)'
-        ),
-        "refresh": 1,
-        "sort": 3,
-        "includeAll": True,
-        "allValue": ".*",
-        "multi": True,
-        "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
-    },
-    {
-        "name": "local_core",
-        "label": "XML Core field",
-        "type": "custom",
-        "query": ",".join(str(index) for index in range(32)),
-        "options": [],
-        "current": {"selected": True, "text": "0", "value": "0"},
     },
 ]
 
@@ -1261,20 +1331,689 @@ dashboard = {
     "version": 1,
 }
 
-serialized = json.dumps(dashboard, indent=2, ensure_ascii=False) + "\n"
+def replace_template(value: object, old: str, new: str) -> object:
+    if isinstance(value, str):
+        return value.replace(old, new)
+    if isinstance(value, list):
+        return [replace_template(item, old, new) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: replace_template(item, old, new)
+            for key, item in value.items()
+        }
+    return value
+
+
+def build_path_overview(
+    mode: str,
+    title: str,
+    uid: str,
+    other_title: str,
+    other_uid: str,
+) -> dict:
+    result = replace_template(copy.deepcopy(dashboard), "$path", mode)
+    assert isinstance(result, dict)
+    result["title"] = title
+    result["uid"] = uid
+    result["description"] = f"Intel-internal GNR PMT {mode} overview."
+    result["templating"]["list"] = [result["templating"]["list"][0]]
+    result["links"].insert(
+        0,
+        {
+            "asDropdown": False,
+            "icon": "exchange-alt",
+            "includeVars": False,
+            "keepTime": True,
+            "tags": [],
+            "targetBlank": False,
+            "title": other_title,
+            "tooltip": f"Switch to {other_title}",
+            "type": "link",
+            "url": f"/d/{other_uid}?var-endpoint=$endpoint",
+        },
+    )
+    return result
+
+
+redfish_dashboard = build_path_overview(
+    "redfish",
+    "Intel PMT · GNR Redfish Overview · Internal",
+    "pmt-gnr-redfish-overview",
+    "Open Local Overview",
+    "pmt-gnr-local-overview",
+)
+local_dashboard = build_path_overview(
+    "local",
+    "Intel PMT · GNR Local Overview · Internal",
+    "pmt-gnr-local-overview",
+    "Open Redfish Overview",
+    "pmt-gnr-redfish-overview",
+)
+
+serialized = json.dumps(redfish_dashboard, indent=2, ensure_ascii=False) + "\n"
+local_serialized = json.dumps(local_dashboard, indent=2, ensure_ascii=False) + "\n"
 REPO_OUTPUT.write_text(serialized, encoding="utf-8")
+REPO_LOCAL_OUTPUT.write_text(local_serialized, encoding="utf-8")
 SYSTEM_OUTPUT.parent.mkdir(parents=True, exist_ok=True)
 SYSTEM_OUTPUT.write_text(serialized, encoding="utf-8")
+SYSTEM_LOCAL_OUTPUT.write_text(local_serialized, encoding="utf-8")
 
 content_panels = sum(panel["type"] != "row" for panel in panels)
 rows = sum(panel["type"] == "row" for panel in panels)
 targets = sum(len(panel.get("targets", [])) for panel in panels)
 print(
-    f"Generated GNR overview: {rows} rows, {content_panels} content panels, "
-    f"{targets} PromQL targets"
+    f"Generated GNR Redfish/Local overviews: {rows} rows, "
+    f"{content_panels} content panels each, {targets} PromQL targets each"
 )
 print(REPO_OUTPUT)
 print(SYSTEM_OUTPUT)
+print(REPO_LOCAL_OUTPUT)
+print(SYSTEM_LOCAL_OUTPUT)
+
+
+_ROLLED_BACK_CORE_DETAIL_SOURCE = r"""
+# Generate a Core Detail dashboard. Overview matrix links pass one exact
+# path-local core_target; no Redfish-to-Local physical mapping is implied.
+panels = []
+panel_id = 0
+y = 0
+
+
+def selected_core(expr: str) -> str:
+    selector = (
+        'label_replace(vector(0),"core_target","$target",'
+        '"__name__",".*")'
+    )
+    return f"({expr}) and on (core_target) ({selector})"
+
+
+row(
+    "00 · Selected Core",
+    "The target is passed from an Overview matrix row and remains within one collection path.",
+)
+add_text(
+    "How This Target Is Selected",
+    "This page does not reuse a Redfish selector for Local data. The Overview "
+    "passes the exact path-local locator shown below. **$target** is an "
+    "Aggregator XML Core field, not a Linux CPU number or a proven cross-path "
+    "physical-Core identity.",
+    0,
+    24,
+    4,
+)
+advance(4)
+add_stat(
+    "$target · Current Temperature",
+    "Latest valid temperature for this exact Aggregator XML Core field.",
+    0,
+    8,
+    selected_core(with_core_target(core_temperature)),
+    unit="celsius",
+    no_value="No enabled Core data",
+)
+add_stat(
+    "$target · Activity Rate",
+    "Experimental U64.38.26 relative-usage rate; not CPU utilization percent.",
+    8,
+    8,
+    selected_core(
+        with_core_target(
+            enabled_cores(f"clamp_min(rate({core_usage}[5m:]),0)")
+        )
+    ),
+    unit="short",
+    no_value="No enabled Core data",
+    decimals=6,
+)
+detail_throttle = f"({throttle_64}) or ({throttle_1024})"
+add_stat(
+    "$target · Throttle Δ",
+    "Combined 64-cycle and 1024-cycle event-count increase in the last five minutes.",
+    16,
+    8,
+    f"sum({selected_core(with_core_target(enabled_cores(detail_throttle)))})",
+    unit="short",
+    no_value="No events",
+    decimals=0,
+)
+advance(4)
+
+row(
+    "01 · Temperature & Activity History",
+    "Time histories for one exact path-local Core target.",
+)
+add_timeseries(
+    "$target · Temperature History",
+    "Raw valid temperature history for the selected XML Core field.",
+    0,
+    12,
+    9,
+    [
+        target(
+            selected_core(with_core_target(core_temperature)),
+            "$target",
+        )
+    ],
+    unit="celsius",
+    minimum=0,
+)
+add_timeseries(
+    "$target · Relative Activity History",
+    "Five-minute rate of the experimental relative-usage counter.",
+    12,
+    12,
+    9,
+    [
+        target(
+            selected_core(
+                with_core_target(
+                    enabled_cores(
+                        f"clamp_min(rate({core_usage}[5m:]),0)"
+                    )
+                )
+            ),
+            "$target",
+        )
+    ],
+    unit="short",
+    minimum=0,
+    decimals=6,
+)
+advance(9)
+add_timeseries(
+    "$target · Throttle Event History",
+    "Rolling five-minute increases for the 64-cycle and 1024-cycle observation families.",
+    0,
+    24,
+    8,
+    [
+        target(
+            selected_core(
+                with_core_target(enabled_cores(throttle_64))
+            ),
+            "64 cycles",
+            "A",
+        ),
+        target(
+            selected_core(
+                with_core_target(enabled_cores(throttle_1024))
+            ),
+            "1024 cycles",
+            "B",
+        ),
+    ],
+    unit="short",
+    minimum=0,
+)
+advance(8)
+
+row(
+    "02 · Per-Core Operating Profile",
+    "Five-minute residency percentages calculated only from this Core's own counters.",
+)
+detail_profiles = [
+    (
+        "Frequency Residency",
+        per_core_residency(
+            "freq_hist_r", "second_total", histogram_ranges["freq"]
+        ),
+        0,
+    ),
+    (
+        "Temperature Residency",
+        per_core_residency(
+            "temp_hist_r", "second_total", histogram_ranges["temp"]
+        ),
+        12,
+    ),
+    (
+        "Voltage Residency",
+        per_core_residency(
+            "volt_hist_r", "second_total", histogram_ranges["volt"]
+        ),
+        0,
+    ),
+    (
+        "Cdyn Level Residency",
+        per_core_residency(
+            "cdyn_level_",
+            "res_microsecond_total",
+            [f"Cdyn level {level}" for level in range(6)],
+        ),
+        12,
+    ),
+]
+for index, (title_text, expr, x_pos) in enumerate(detail_profiles):
+    add_residency(
+        f"$target · {title_text}",
+        "This distribution retains the selected Core's own counters; no cross-Core aggregation is applied.",
+        x_pos,
+        12,
+        8,
+        selected_core(expr),
+    )
+    if index in {1, 3}:
+        advance(8)
+
+core_detail_variables = [
+    {
+        "name": "endpoint",
+        "label": "Platform endpoint",
+        "type": "query",
+        "datasource": DATASOURCE,
+        "query": {
+            "query": 'label_values({PMTEndpoint=~".+"},PMTEndpoint)',
+            "refId": "PrometheusVariableQueryEditor-Endpoint",
+        },
+        "definition": 'label_values({PMTEndpoint=~".+"},PMTEndpoint)',
+        "refresh": 1,
+        "hide": 2,
+        "current": {"selected": True, "text": "avc01", "value": "avc01"},
+    },
+    {
+        "name": "path",
+        "label": "Collection path",
+        "type": "custom",
+        "query": "redfish,local",
+        "options": [],
+        "hide": 2,
+        "current": {"selected": True, "text": "redfish", "value": "redfish"},
+    },
+    {
+        "name": "target",
+        "label": "Core target",
+        "type": "textbox",
+        "query": "AGG[D0/A25/S2] · Core 0",
+        "hide": 2,
+        "current": {
+            "selected": True,
+            "text": "AGG[D0/A25/S2] · Core 0",
+            "value": "AGG[D0/A25/S2] · Core 0",
+        },
+    },
+]
+
+core_detail_dashboard = {
+    "annotations": dashboard["annotations"],
+    "description": (
+        "Complete per-Core PMT detail reached from a GNR Overview matrix row; "
+        "the path-local locator is preserved without claiming cross-path mapping."
+    ),
+    "editable": True,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [
+        {
+            "asDropdown": False,
+            "icon": "arrow-left",
+            "includeVars": False,
+            "keepTime": True,
+            "tags": [],
+            "targetBlank": False,
+            "title": "Back to GNR Overview",
+            "tooltip": "Return to all-Core matrices",
+            "type": "link",
+            "url": (
+                "/d/pmt-gnr-telemetry-overview"
+                "?var-endpoint=$endpoint&var-path=$path"
+            ),
+        }
+    ],
+    "liveNow": True,
+    "panels": panels,
+    "refresh": "20s",
+    "schemaVersion": 41,
+    "tags": ["Intel Internal", "GNR", "Intel PMT", "Core detail"],
+    "templating": {"list": core_detail_variables},
+    "time": {"from": "now-30m", "to": "now"},
+    "timepicker": dashboard["timepicker"],
+    "timezone": "browser",
+    "title": "Intel PMT · GNR Core Detail · Internal",
+    "uid": "pmt-gnr-core-detail",
+    "version": 1,
+}
+core_detail_serialized = (
+    json.dumps(core_detail_dashboard, indent=2, ensure_ascii=False) + "\n"
+)
+REPO_CORE_DETAIL_OUTPUT.write_text(
+    core_detail_serialized, encoding="utf-8"
+)
+SYSTEM_CORE_DETAIL_OUTPUT.write_text(
+    core_detail_serialized, encoding="utf-8"
+)
+print(
+    f"Generated GNR Core Detail: "
+    f"{sum(panel['type'] != 'row' for panel in panels)} content panels"
+)
+print(REPO_CORE_DETAIL_OUTPUT)
+print(SYSTEM_CORE_DETAIL_OUTPUT)
+"""
+
+
+_ARCHIVED_CORE_ANALYSIS_SOURCE = r"""
+# Generate a focused Core Analysis dashboard. Every visible variable controls
+# every metric panel, and the target remains local to the selected path.
+panels = []
+panel_id = 0
+y = 0
+core_identity = (
+    "PMTEndpoint,CollectionMode,DeviceId,AccessId,SourceId,core"
+)
+
+
+def analysis_core_target(expr: str) -> str:
+    displayed = with_aggregator_display(expr)
+    return (
+        f'label_join({displayed},"core_target"," · Core ",'
+        f'"agg_display","core")'
+    )
+
+
+def selected_analysis_core(expr: str) -> str:
+    selector = (
+        'label_replace(vector(0),"core_target","$core_target",'
+        '"__name__",".*")'
+    )
+    return (
+        f"({analysis_core_target(expr)}) "
+        f"and on (core_target) ({selector})"
+    )
+
+
+def analysis_residency(
+    metric_stem: str,
+    suffix: str,
+    labels: list[str],
+) -> str:
+    selector = (
+        f'{{__name__=~"c[0-9]+_{metric_stem}[0-9]+_{suffix}",'
+        f"{core_scope}}}"
+    )
+    all_labeled = (
+        f'label_replace({selector},"core","$1","__name__",'
+        f'"c([0-9]+)_{metric_stem}[0-9]+_{suffix}")'
+    )
+    all_labeled = (
+        f'label_replace({all_labeled},"bucket","$1","__name__",'
+        f'"c[0-9]+_{metric_stem}([0-9]+)_{suffix}")'
+    )
+    denominator = (
+        f"sum by ({core_identity}) (rate({all_labeled}[5m:]))"
+    )
+    buckets = []
+    for index, label in enumerate(labels):
+        bucket = (
+            f'{{__name__=~"c[0-9]+_{metric_stem}{index}_{suffix}",'
+            f"{core_scope}}}"
+        )
+        numerator = (
+            f'label_replace({bucket},"core","$1","__name__",'
+            f'"c([0-9]+)_{metric_stem}{index}_{suffix}")'
+        )
+        percentage = (
+            f"(100 * rate({numerator}[5m:]) / "
+            f"on ({core_identity}) group_left "
+            f"clamp_min({denominator},1e-12))"
+        )
+        buckets.append(
+            f'label_replace({percentage},"range","{label}",'
+            f'"core",".+")'
+        )
+    return selected_analysis_core(" or ".join(buckets))
+
+
+analysis_throttle_64 = (
+    f'clamp_min(increase(label_replace({{__name__=~"c[0-9]+_pvp_'
+    f'throttle_64_total",{core_scope}}},"core","$1","__name__",'
+    f'"c([0-9]+)_pvp_throttle_64_total")[5m:]),0)'
+)
+analysis_throttle_1024 = (
+    f'clamp_min(increase(label_replace({{__name__=~"c[0-9]+_pvp_'
+    f'throttle_1024_total",{core_scope}}},"core","$1","__name__",'
+    f'"c([0-9]+)_pvp_throttle_1024_total")[5m:]),0)'
+)
+
+row(
+    "00 · Exact Core Target",
+    "All controls on this dashboard apply to every panel. The target is path-local and does not imply OOB-to-Local physical mapping.",
+)
+add_text(
+    "How to Read This Dashboard",
+    "Select **Platform endpoint**, **Collection path**, then one **Core target**. "
+    "Redfish targets use `AGG[D/A/S] · Core N`; Local targets use "
+    "`AGG[telemN] · Core N`. Every panel below uses that exact target.",
+    0,
+    24,
+    3,
+)
+advance(3)
+add_stat(
+    "$core_target · Current Temperature",
+    "Latest valid temperature for this exact Aggregator XML Core field.",
+    0,
+    8,
+    selected_analysis_core(core_temperature),
+    unit="celsius",
+    no_value="No enabled Core data",
+)
+add_stat(
+    "$core_target · Activity Rate",
+    "Experimental U64.38.26 relative-usage rate; not CPU utilization percent.",
+    8,
+    8,
+    selected_analysis_core(
+        f"clamp_min(rate({core_usage}[5m:]),0)"
+    ),
+    unit="short",
+    no_value="No enabled Core data",
+    decimals=6,
+)
+add_stat(
+    "$core_target · Throttle Δ",
+    "Combined 64-cycle and 1024-cycle event-count increase over five minutes.",
+    16,
+    8,
+    f"sum({selected_analysis_core(f'({analysis_throttle_64}) or ({analysis_throttle_1024})')})",
+    unit="short",
+    no_value="No events",
+    decimals=0,
+)
+advance(4)
+
+row(
+    "01 · Core History",
+    "Temperature, relative activity and throttle history for the exact selected target.",
+)
+add_timeseries(
+    "$core_target · Temperature",
+    "Valid temperature history for this Aggregator XML Core field.",
+    0,
+    12,
+    9,
+    [target(selected_analysis_core(core_temperature), "$core_target")],
+    unit="celsius",
+    minimum=0,
+)
+add_timeseries(
+    "$core_target · Relative Activity",
+    "Five-minute rate of the experimental relative-usage counter.",
+    12,
+    12,
+    9,
+    [
+        target(
+            selected_analysis_core(
+                f"clamp_min(rate({core_usage}[5m:]),0)"
+            ),
+            "$core_target",
+        )
+    ],
+    unit="short",
+    minimum=0,
+    decimals=6,
+)
+advance(9)
+add_timeseries(
+    "$core_target · Throttle Events",
+    "Rolling five-minute increases for both throttle observation families.",
+    0,
+    24,
+    8,
+    [
+        target(
+            selected_analysis_core(analysis_throttle_64),
+            "64 cycles",
+            "A",
+        ),
+        target(
+            selected_analysis_core(analysis_throttle_1024),
+            "1024 cycles",
+            "B",
+        ),
+    ],
+    unit="short",
+    minimum=0,
+)
+advance(8)
+
+row(
+    "02 · Core Operating Profile",
+    "Each percentage uses only the selected Core's own five-minute counter growth.",
+)
+analysis_profiles = [
+    (
+        "Frequency Residency",
+        analysis_residency(
+            "freq_hist_r", "second_total", histogram_ranges["freq"]
+        ),
+        0,
+    ),
+    (
+        "Temperature Residency",
+        analysis_residency(
+            "temp_hist_r", "second_total", histogram_ranges["temp"]
+        ),
+        12,
+    ),
+    (
+        "Voltage Residency",
+        analysis_residency(
+            "volt_hist_r", "second_total", histogram_ranges["volt"]
+        ),
+        0,
+    ),
+    (
+        "Cdyn Level Residency",
+        analysis_residency(
+            "cdyn_level_",
+            "res_microsecond_total",
+            [f"Cdyn level {level}" for level in range(6)],
+        ),
+        12,
+    ),
+]
+for index, (title_text, expr, x_pos) in enumerate(analysis_profiles):
+    add_residency(
+        f"$core_target · {title_text}",
+        "No counter from another Core is included in this distribution.",
+        x_pos,
+        12,
+        8,
+        expr,
+    )
+    if index in {1, 3}:
+        advance(8)
+
+target_inventory = analysis_core_target(core_temperature)
+target_inventory = (
+    f'label_replace({target_inventory},"core_value","$1",'
+    f'"core_target","(.+)")'
+)
+target_variable_query = (
+    f"query_result(count by (core_target,core_value) "
+    f"({target_inventory}))"
+)
+core_analysis_variables = [
+    variables[0],
+    variables[1],
+    {
+        "name": "core_target",
+        "label": "Core target",
+        "type": "query",
+        "datasource": DATASOURCE,
+        "query": {
+            "query": target_variable_query,
+            "refId": "PrometheusVariableQueryEditor-CoreTarget",
+        },
+        "definition": target_variable_query,
+        "regex": (
+            '/core_target="(?<text>[^"]+)",'
+            'core_value="(?<value>[^"]+)"/'
+        ),
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+            "selected": True,
+            "text": "AGG[D0/A25/S2] · Core 0",
+            "value": "AGG[D0/A25/S2] · Core 0",
+        },
+    },
+]
+core_analysis_dashboard = {
+    "annotations": dashboard["annotations"],
+    "description": (
+        "Focused path-local Core analysis. Endpoint, path and Core target "
+        "control every metric panel."
+    ),
+    "editable": True,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "links": [
+        {
+            "asDropdown": False,
+            "icon": "arrow-left",
+            "includeVars": False,
+            "keepTime": True,
+            "tags": [],
+            "targetBlank": False,
+            "title": "Back to Customer Overview",
+            "tooltip": "Return to the concise GNR overview",
+            "type": "link",
+            "url": (
+                "/d/pmt-gnr-telemetry-overview"
+                "?var-endpoint=$endpoint&var-path=$path"
+            ),
+        }
+    ],
+    "liveNow": True,
+    "panels": panels,
+    "refresh": "20s",
+    "schemaVersion": 41,
+    "tags": ["Intel Internal", "GNR", "Intel PMT", "Core analysis"],
+    "templating": {"list": core_analysis_variables},
+    "time": {"from": "now-30m", "to": "now"},
+    "timepicker": dashboard["timepicker"],
+    "timezone": "browser",
+    "title": "Intel PMT · GNR Core Analysis · Internal",
+    "uid": "pmt-gnr-core-analysis",
+    "version": 1,
+}
+core_analysis_serialized = (
+    json.dumps(core_analysis_dashboard, indent=2, ensure_ascii=False) + "\n"
+)
+REPO_CORE_ANALYSIS_OUTPUT.write_text(
+    core_analysis_serialized, encoding="utf-8"
+)
+SYSTEM_CORE_ANALYSIS_OUTPUT.write_text(
+    core_analysis_serialized, encoding="utf-8"
+)
+print(
+    f"Generated GNR Core Analysis: "
+    f"{sum(panel['type'] != 'row' for panel in panels)} content panels"
+)
+print(REPO_CORE_ANALYSIS_OUTPUT)
+print(SYSTEM_CORE_ANALYSIS_OUTPUT)
+"""
 
 
 # Generate a dedicated Explorer for this Overview. The preserved legacy
@@ -1283,7 +2022,7 @@ panels = []
 panel_id = 0
 y = 0
 explorer_scope = (
-    'PMTEndpoint="$endpoint",CollectionMode="$path",DeviceId=~"$socket",'
+    'PMTEndpoint="$endpoint",CollectionMode="$path",DeviceId=~"$device",'
     'AccessId=~"$access",PMTGuid=~"$die"'
 )
 row(
@@ -1309,8 +2048,8 @@ add_timeseries(
     10,
     [
         target(
-            explorer_selector,
-            "{{CollectionMode}} · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(explorer_selector),
+            "{{agg_display}}",
         )
     ],
     unit="short",
@@ -1333,13 +2072,15 @@ add_timeseries(
     8,
     [
         target(
-            f"rate({explorer_selector}[5m])",
-            "Counter rate/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(f"rate({explorer_selector}[5m])"),
+            "Counter rate/s · {{agg_display}}",
             "A",
         ),
         target(
-            f"delta({explorer_selector}[5m])/300",
-            "Gauge delta/s · AGG[D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}]",
+            with_aggregator_display(
+                f"delta({explorer_selector}[5m])/300"
+            ),
+            "Gauge delta/s · {{agg_display}}",
             "B",
         ),
     ],
@@ -1350,7 +2091,29 @@ advance(8)
 explorer_variables = [
     variables[0],
     variables[1],
-    variables[2],
+    {
+        "name": "device",
+        "label": "Device / Host",
+        "type": "query",
+        "datasource": DATASOURCE,
+        "query": {
+            "query": (
+                'label_values({PMTEndpoint="$endpoint",'
+                'CollectionMode="$path"},DeviceId)'
+            ),
+            "refId": "PrometheusVariableQueryEditor-Device",
+        },
+        "definition": (
+            'label_values({PMTEndpoint="$endpoint",'
+            'CollectionMode="$path"},DeviceId)'
+        ),
+        "refresh": 1,
+        "sort": 3,
+        "includeAll": True,
+        "allValue": ".*",
+        "multi": True,
+        "current": {"selected": True, "text": ["All"], "value": ["$__all"]},
+    },
     {
         "name": "access",
         "label": "Access",
@@ -1359,13 +2122,13 @@ explorer_variables = [
         "query": {
             "query": (
                 'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-                'DeviceId=~"$socket"},AccessId)'
+                'DeviceId=~"$device"},AccessId)'
             ),
             "refId": "PrometheusVariableQueryEditor-Access",
         },
         "definition": (
             'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-            'DeviceId=~"$socket"},AccessId)'
+            'DeviceId=~"$device"},AccessId)'
         ),
         "refresh": 1,
         "sort": 3,
@@ -1382,13 +2145,13 @@ explorer_variables = [
         "query": {
             "query": (
                 'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-                'DeviceId=~"$socket",AccessId=~"$access"},PMTGuid)'
+                'DeviceId=~"$device",AccessId=~"$access"},PMTGuid)'
             ),
             "refId": "PrometheusVariableQueryEditor-Die",
         },
         "definition": (
             'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-            'DeviceId=~"$socket",AccessId=~"$access"},PMTGuid)'
+            'DeviceId=~"$device",AccessId=~"$access"},PMTGuid)'
         ),
         "refresh": 1,
         "sort": 1,
@@ -1405,14 +2168,14 @@ explorer_variables = [
         "query": {
             "query": (
                 'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-                'DeviceId=~"$socket",AccessId=~"$access",PMTGuid=~"$die"},'
+                'DeviceId=~"$device",AccessId=~"$access",PMTGuid=~"$die"},'
                 "__name__)"
             ),
             "refId": "PrometheusVariableQueryEditor-Metric",
         },
         "definition": (
             'label_values({PMTEndpoint="$endpoint",CollectionMode="$path",'
-            'DeviceId=~"$socket",AccessId=~"$access",PMTGuid=~"$die"},'
+            'DeviceId=~"$device",AccessId=~"$access",PMTGuid=~"$die"},'
             "__name__)"
         ),
         "refresh": 1,
@@ -1442,10 +2205,10 @@ explorer_dashboard = {
             "keepTime": True,
             "tags": [],
             "targetBlank": False,
-            "title": "Back to GNR Overview",
-            "tooltip": "Return to the architecture-based GNR telemetry overview",
+            "title": "Back to Redfish Overview",
+            "tooltip": "Return to the GNR Redfish overview",
             "type": "link",
-            "url": "/d/pmt-gnr-telemetry-overview",
+            "url": "/d/pmt-gnr-redfish-overview",
         },
         {
             "asDropdown": False,

@@ -40,6 +40,8 @@ Lead Maintainer: **@jwasiuki (Jedrzej Wasiukiewicz)**
 Contact: **jedrzej.wasiukiewicz@intel.com**
 
 ## Quick Start
+> The commands below are the upstream generic examples. For the current avc01 dual-source Redfish + local deployment, start with `docs/README.md` and `docs/complete-pmt-collection-workflow.md`; do not use the generic Python example to infer the production architecture.
+
 Collect local aggregators with python script
 ```bash
 git clone https://github.com/intel/Intel-PMT.git
@@ -67,9 +69,15 @@ cd tools/otel
 
 ## Documentation
 Additional documentation lives under `docs/`:
+- **Documentation map for beginners and developers:** `docs/README.md`
 - **Start here — complete avc01 BMC + in-band workflow:** `docs/complete-pmt-collection-workflow.md`
-- Complete metric summary: `docs/pmt-metrics-summary.md`
-- Searchable metric catalog: `docs/pmt-metrics-catalog.csv`
+- Intel-internal readable Telemetry/TPAS architecture guide: `docs/internal-telemetry-architecture-readable.md`
+- Unresolved physical mapping, metric semantics, ownership, and acceptance criteria: `docs/pmt-unresolved-work.md`
+- CPU, Core, label, and all 36 aggregator topology: `docs/pmt-platform-topology.md`
+- Human-readable guide to all metric categories, types, and units: `docs/pmt-metrics-summary.md`
+- Detailed reference for all 38 current metric families, including data semantics, queries, and caveats: `docs/pmt-metric-family-reference.md`
+- Intel-internal bilingual guide to the architecture-based GNR Telemetry Overview, panel semantics, units, and open semantic gaps: `docs/gnr-telemetry-dashboard-guide.md`
+- Complete searchable 5,285-metric catalog with family, HELP, units, query guidance, caveats, and labels: `docs/pmt-metrics-catalog.csv`
 - GNR FIVR exact-schema workflow: `docs/gnr-fivr-health-collection-workflow.md`
 - Backend reproduction guide: `docs/pmt-telemetry-backend-reproduction.md`
 - FAQ: `docs/FAQ.md`

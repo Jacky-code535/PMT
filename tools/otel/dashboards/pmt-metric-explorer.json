@@ -15,7 +15,7 @@
       }
     ]
   },
-  "description": "Intel-internal full PMT metric search paired with the GNR Telemetry Overview.",
+  "description": "Technical Intel PMT metric search with controls and results kept together.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -23,14 +23,14 @@
     {
       "asDropdown": false,
       "icon": "arrow-left",
-      "includeVars": false,
+      "includeVars": true,
       "keepTime": true,
       "tags": [],
       "targetBlank": false,
-      "title": "Back to Redfish Overview",
-      "tooltip": "Return to the GNR Redfish overview",
+      "title": "Back to Customer Demo",
+      "tooltip": "Return to the customer-facing PMT dashboard",
       "type": "link",
-      "url": "/d/pmt-gnr-redfish-overview"
+      "url": "/d/pmt-avc01-redfish"
     },
     {
       "asDropdown": false,
@@ -39,10 +39,10 @@
       "keepTime": false,
       "tags": [],
       "targetBlank": true,
-      "title": "Bilingual Dashboard Guide",
-      "tooltip": "Metric semantics, units and unresolved items",
+      "title": "Metric family reference",
+      "tooltip": "Read the value semantics, query guidance, and caveats",
       "type": "link",
-      "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/gnr-telemetry-dashboard-guide.md"
+      "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/pmt-metric-family-reference.md"
     }
   ],
   "liveNow": true,
@@ -50,8 +50,8 @@
     {
       "id": 1,
       "type": "row",
-      "title": "Metric Search Results",
-      "description": "Search all current PMT names. Interpret each result with its catalog type, unit and family guidance.",
+      "title": "Metric Search Results / 指标搜索结果",
+      "description": "先在页面顶部的Search metric中选择名称；下方立即显示历史、当前series与变化率。",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -64,7 +64,7 @@
     {
       "id": 2,
       "type": "text",
-      "title": "How to Use",
+      "title": "How to Use / 使用方法",
       "description": "",
       "datasource": {
         "type": "prometheus",
@@ -77,7 +77,7 @@
         "y": 1
       },
       "options": {
-        "content": "Select **Metric** at the top. Use **Raw History** for current gauges and historical counters. In **Five-Minute Change**, read only the calculation that matches the metric type. Raw and No Data are not interchangeable.",
+        "content": "1. 在顶部 **Search metric** 输入关键词并选择准确名称；2. Raw History适合gauge/current value；3. 5-Minute Change同时提供counter rate和gauge delta，必须结合Metric catalog中的type与HELP解释。",
         "mode": "markdown"
       }
     },
@@ -85,7 +85,7 @@
       "id": 3,
       "type": "timeseries",
       "title": "$metric · Raw History",
-      "description": "Raw history for the selected metric. Counter absolute values normally do not represent current intensity.",
+      "description": "所选metric的原始历史值；counter绝对值通常不表示当前强度。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -106,7 +106,7 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 10,
+            "fillOpacity": 12,
             "gradientMode": "opacity",
             "showPoints": "never",
             "spanNulls": true,
@@ -132,7 +132,7 @@
           "displayMode": "table",
           "placement": "right",
           "showLegend": true,
-          "width": 340
+          "width": 360
         },
         "tooltip": {
           "mode": "multi",
@@ -141,8 +141,8 @@
       },
       "targets": [
         {
-          "expr": "(label_replace(label_join(label_replace(label_replace(label_replace(({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"redfish\"}),\"agg_d\",\"D$1\",\"DeviceId\",\"(.+)\"),\"agg_a\",\"A$1\",\"AccessId\",\"(.+)\"),\"agg_s\",\"S$1\",\"SourceId\",\"(.+)\"),\"agg_locator\",\"/\",\"agg_d\",\"agg_a\",\"agg_s\"),\"agg_display\",\"AGG[$1]\",\"agg_locator\",\"(.+)\")) or (label_replace(({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"local\"}),\"agg_display\",\"AGG[$1]\",\"AccessId\",\"(.+)\"))",
-          "legendFormat": "{{agg_display}}",
+          "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}",
           "refId": "A"
         }
       ]
@@ -151,7 +151,7 @@
       "id": 4,
       "type": "table",
       "title": "$metric · Current Series",
-      "description": "Current values with complete source labels.",
+      "description": "当前值及其完整来源标签。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -195,11 +195,16 @@
           "show": false
         },
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Value"
+          }
+        ]
       },
       "targets": [
         {
-          "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
           "legendFormat": "",
           "refId": "A",
           "instant": true,
@@ -219,8 +224,8 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "$metric · Five-Minute Change",
-      "description": "Counter rate and gauge delta are both shown for technical inspection; only one normally matches the selected family semantics.",
+      "title": "$metric · 5-Minute Change",
+      "description": "Counter查看rate/s；gauge查看窗口首尾平均变化率。只解释与该metric type匹配的曲线。",
       "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
@@ -241,7 +246,7 @@
             "drawStyle": "line",
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "fillOpacity": 10,
+            "fillOpacity": 12,
             "gradientMode": "opacity",
             "showPoints": "never",
             "spanNulls": true,
@@ -267,7 +272,7 @@
           "displayMode": "table",
           "placement": "bottom",
           "showLegend": true,
-          "width": 340
+          "width": 360
         },
         "tooltip": {
           "mode": "multi",
@@ -276,13 +281,13 @@
       },
       "targets": [
         {
-          "expr": "(label_replace(label_join(label_replace(label_replace(label_replace((rate({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"redfish\"}),\"agg_d\",\"D$1\",\"DeviceId\",\"(.+)\"),\"agg_a\",\"A$1\",\"AccessId\",\"(.+)\"),\"agg_s\",\"S$1\",\"SourceId\",\"(.+)\"),\"agg_locator\",\"/\",\"agg_d\",\"agg_a\",\"agg_s\"),\"agg_display\",\"AGG[$1]\",\"agg_locator\",\"(.+)\")) or (label_replace((rate({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"local\"}),\"agg_display\",\"AGG[$1]\",\"AccessId\",\"(.+)\"))",
-          "legendFormat": "Counter rate/s · {{agg_display}}",
+          "expr": "rate({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])",
+          "legendFormat": "counter rate/s · D{{DeviceId}}/A{{AccessId}}",
           "refId": "A"
         },
         {
-          "expr": "(label_replace(label_join(label_replace(label_replace(label_replace((delta({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"redfish\"}),\"agg_d\",\"D$1\",\"DeviceId\",\"(.+)\"),\"agg_a\",\"A$1\",\"AccessId\",\"(.+)\"),\"agg_s\",\"S$1\",\"SourceId\",\"(.+)\"),\"agg_locator\",\"/\",\"agg_d\",\"agg_a\",\"agg_s\"),\"agg_display\",\"AGG[$1]\",\"agg_locator\",\"(.+)\")) or (label_replace((delta({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300) and on(CollectionMode) count by (CollectionMode) ({PMTEndpoint=\"$endpoint\",CollectionMode=\"local\"}),\"agg_display\",\"AGG[$1]\",\"AccessId\",\"(.+)\"))",
-          "legendFormat": "Gauge delta/s · {{agg_display}}",
+          "expr": "delta({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300",
+          "legendFormat": "gauge delta/s · D{{DeviceId}}/A{{AccessId}}",
           "refId": "B"
         }
       ]
@@ -291,16 +296,15 @@
   "refresh": "20s",
   "schemaVersion": 41,
   "tags": [
-    "Intel Internal",
-    "GNR",
     "Intel PMT",
-    "metric explorer"
+    "metric explorer",
+    "technical diagnostics"
   ],
   "templating": {
     "list": [
       {
         "name": "endpoint",
-        "label": "Platform endpoint",
+        "label": "Endpoint",
         "type": "query",
         "datasource": {
           "type": "prometheus",
@@ -320,8 +324,8 @@
         }
       },
       {
-        "name": "path",
-        "label": "Collection path",
+        "name": "mode",
+        "label": "Collection mode",
         "type": "query",
         "datasource": {
           "type": "prometheus",
@@ -329,30 +333,37 @@
         },
         "query": {
           "query": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
-          "refId": "PrometheusVariableQueryEditor-Path"
+          "refId": "PrometheusVariableQueryEditor-Mode"
         },
         "definition": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
         "refresh": 1,
         "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
         "current": {
           "selected": true,
-          "text": "redfish",
-          "value": "redfish"
+          "text": [
+            "redfish"
+          ],
+          "value": [
+            "redfish"
+          ]
         }
       },
       {
         "name": "device",
-        "label": "Device / Host",
+        "label": "Device",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\"},DeviceId)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)",
           "refId": "PrometheusVariableQueryEditor-Device"
         },
-        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\"},DeviceId)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)",
         "refresh": 1,
         "sort": 3,
         "includeAll": true,
@@ -377,10 +388,10 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\"},AccessId)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\"},AccessId)",
           "refId": "PrometheusVariableQueryEditor-Access"
         },
-        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\"},AccessId)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\"},AccessId)",
         "refresh": 1,
         "sort": 3,
         "includeAll": true,
@@ -405,10 +416,10 @@
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
           "refId": "PrometheusVariableQueryEditor-Die"
         },
-        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\"},PMTGuid)",
         "refresh": 1,
         "sort": 1,
         "includeAll": true,
@@ -426,17 +437,17 @@
       },
       {
         "name": "metric",
-        "label": "Metric",
+        "label": "Search metric",
         "type": "query",
         "datasource": {
           "type": "prometheus",
           "uid": "PBFA97CFB590B2093"
         },
         "query": {
-          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
           "refId": "PrometheusVariableQueryEditor-Metric"
         },
-        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
         "refresh": 1,
         "sort": 1,
         "current": {
@@ -453,12 +464,15 @@
   },
   "timepicker": {
     "refresh_intervals": [
+      "5s",
+      "10s",
       "20s",
       "30s",
       "1m",
       "5m"
     ],
     "time_options": [
+      "5m",
       "15m",
       "30m",
       "1h",
@@ -469,7 +483,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "Intel PMT · GNR Metric Explorer · Internal",
-  "uid": "pmt-gnr-metric-explorer",
+  "title": "Intel PMT · Advanced Metric Explorer",
+  "uid": "pmt-avc01-metric-explorer",
   "version": 1
 }

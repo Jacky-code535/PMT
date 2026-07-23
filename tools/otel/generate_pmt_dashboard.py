@@ -9,10 +9,14 @@ from pathlib import Path
 DATASOURCE = {"type": "prometheus", "uid": "PBFA97CFB590B2093"}
 REPO_OUTPUT = Path(__file__).parent / "dashboards" / "pmt-redfish-comprehensive.json"
 SYSTEM_OUTPUT = Path("/var/lib/grafana/dashboards/pmt-backend-test/pmt-real-redfish.json")
+REPO_EXPLORER_OUTPUT = Path(__file__).parent / "dashboards" / "pmt-metric-explorer.json"
+SYSTEM_EXPLORER_OUTPUT = Path("/var/lib/grafana/dashboards/pmt-backend-test/pmt-metric-explorer.json")
 
 panels: list[dict] = []
 panel_id = 0
 y = 0
+BAR_LABEL_SIZE = 10
+BAR_VALUE_SIZE = 10
 
 
 def next_id() -> int:
@@ -45,13 +49,19 @@ def base_panel(title: str, description: str, x: int, w: int, h: int, panel_type:
 
 
 def add_stat(title: str, description: str, x: int, w: int, expr: str, unit: str = "short",
-             thresholds: list[dict] | None = None, color_mode: str = "value", legend: str = "") -> None:
-    panel = base_panel(title, description, x, w, 4, "stat")
+             thresholds: list[dict] | None = None, color_mode: str = "value", legend: str = "",
+             mappings: list[dict] | None = None, height: int = 4,
+             no_value: str | None = None) -> None:
+    panel = base_panel(title, description, x, w, height, "stat")
+    defaults = {
+        "color": {"mode": "thresholds"}, "unit": unit,
+        "thresholds": {"mode": "absolute", "steps": thresholds or [{"color": "green", "value": None}]},
+        "mappings": mappings or [],
+    }
+    if no_value is not None:
+        defaults["noValue"] = no_value
     panel.update({
-        "fieldConfig": {"defaults": {
-            "color": {"mode": "thresholds"}, "unit": unit,
-            "thresholds": {"mode": "absolute", "steps": thresholds or [{"color": "green", "value": None}]},
-        }, "overrides": []},
+        "fieldConfig": {"defaults": defaults, "overrides": []},
         "options": {
             "colorMode": color_mode, "graphMode": "area", "justifyMode": "center", "orientation": "auto",
             "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False}, "textMode": "auto",
@@ -63,7 +73,8 @@ def add_stat(title: str, description: str, x: int, w: int, expr: str, unit: str 
 
 def add_timeseries(title: str, description: str, x: int, w: int, h: int, targets: list[dict],
                    unit: str = "short", minimum: float | None = None, maximum: float | None = None,
-                   stacking: str = "none", legend_place: str = "bottom") -> None:
+                   stacking: str = "none", legend_place: str = "bottom",
+                   no_value: str | None = None, decimals: int | None = None) -> None:
     global y
     defaults: dict = {"color": {"mode": "palette-classic"}, "unit": unit,
                       "custom": {"drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2,
@@ -75,6 +86,10 @@ def add_timeseries(title: str, description: str, x: int, w: int, h: int, targets
         defaults["min"] = minimum
     if maximum is not None:
         defaults["max"] = maximum
+    if no_value is not None:
+        defaults["noValue"] = no_value
+    if decimals is not None:
+        defaults["decimals"] = decimals
     panel = base_panel(title, description, x, w, h, "timeseries")
     panel.update({
         "fieldConfig": {"defaults": defaults, "overrides": []},
@@ -105,8 +120,29 @@ def add_bar_gauge(title: str, description: str, x: int, w: int, h: int, expr: st
         "options": {"displayMode": "gradient", "minVizHeight": 10, "minVizWidth": 0,
                     "namePlacement": "left", "orientation": "horizontal", "reduceOptions": {
                         "calcs": ["lastNotNull"], "fields": "", "values": False}, "showUnfilled": True,
-                    "sizing": "auto", "valueMode": "color"},
+                    "sizing": "auto", "valueMode": "color",
+                    "text": {"titleSize": BAR_LABEL_SIZE, "valueSize": BAR_VALUE_SIZE}},
         "targets": [target(expr, legend, instant=True)],
+    })
+    panels.append(panel)
+
+
+def add_residency_bar(title: str, description: str, x: int, w: int, h: int, expr: str) -> None:
+    panel = base_panel(title, description, x, w, h, "bargauge")
+    panel.update({
+        "fieldConfig": {"defaults": {
+            "color": {"mode": "fixed", "fixedColor": "blue"}, "unit": "percent",
+            "decimals": 1, "min": 0, "max": 100,
+            "displayName": "${__field.labels.range}",
+        }, "overrides": []},
+        "options": {
+            "displayMode": "gradient", "minVizHeight": 22, "maxVizHeight": 22, "minVizWidth": 0,
+            "namePlacement": "left", "orientation": "horizontal",
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+            "showUnfilled": True, "sizing": "manual", "valueMode": "text",
+            "text": {"titleSize": BAR_LABEL_SIZE, "valueSize": BAR_VALUE_SIZE},
+        },
+        "targets": [target(expr, "{{range}}", instant=True)],
     })
     panels.append(panel)
 
@@ -116,13 +152,62 @@ def add_table(title: str, description: str, x: int, w: int, h: int, queries: lis
     panel.update({
         "fieldConfig": {"defaults": {"custom": {"align": "auto", "cellOptions": {"type": "auto"},
                                                    "inspect": False}, "mappings": [], "thresholds": {
-                                                       "mode": "absolute", "steps": [{"color": "green", "value": None},
-                                                                                     {"color": "red", "value": 1}]}},
+                                                       "mode": "absolute", "steps": [{"color": "blue", "value": None}]}},
                         "overrides": []},
         "options": {"cellHeight": "sm", "footer": {"countRows": False, "fields": "", "reducer": ["sum"], "show": False},
                     "showHeader": True, "sortBy": [{"desc": True, "displayName": "Value"}]},
         "targets": queries,
         "transformations": [{"id": "labelsToFields", "options": {"mode": "columns"}}],
+    })
+    panels.append(panel)
+
+
+def add_fivr_detail_table(title: str, description: str, x: int, w: int, h: int, expr: str) -> None:
+    panel = base_panel(title, description, x, w, h, "table")
+    panel.update({
+        "fieldConfig": {"defaults": {
+            "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": False},
+            "mappings": [], "noValue": "No non-zero slots",
+            "thresholds": {"mode": "absolute", "steps": [
+                {"color": "green", "value": None},
+                {"color": "yellow", "value": 1},
+                {"color": "red", "value": 2},
+            ]},
+        }, "overrides": [{
+            "matcher": {"id": "byName", "options": "Code"},
+            "properties": [{"id": "custom.cellOptions", "value": {"type": "color-background"}}],
+        }]},
+        "options": {
+            "cellHeight": "sm",
+            "footer": {"countRows": True, "fields": "", "reducer": ["count"], "show": True},
+            "showHeader": True,
+            "sortBy": [
+                {"desc": False, "displayName": "C-Die Instance"},
+                {"desc": False, "displayName": "Monitor"},
+                {"desc": False, "displayName": "Slot"},
+            ],
+        },
+        "targets": [target(expr, "", instant=True, fmt="table")],
+        "transformations": [
+            {"id": "labelsToFields", "options": {"mode": "columns"}},
+            {"id": "organize", "options": {
+                "excludeByName": {
+                    "AccessType": True, "DeviceType": True, "PMTEndpoint": True, "PMTGuid": True,
+                    "PMTSizeBytes": True, "RedfishEndpoint": True, "SourceId": True, "SourceType": True,
+                    "Time": True, "__name__": True, "device": True, "hostname": True,
+                    "otel_scope_name": True, "otel_scope_schema_url": True, "otel_scope_version": True,
+                    "telem": True,
+                },
+                "indexByName": {
+                    "DeviceId": 0, "AccessId": 1, "monitor": 2, "slot": 3,
+                    "Value": 4, "CollectionMode": 5,
+                },
+                "renameByName": {
+                    "DeviceId": "C-Die Instance", "AccessId": "Access", "monitor": "Monitor",
+                    "slot": "Slot", "Value": "Code", "CollectionMode": "Source",
+                },
+            }},
+        ],
     })
     panels.append(panel)
 
@@ -140,179 +225,209 @@ def advance(height: int) -> None:
 
 sel = 'PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access",PMTGuid=~"$die"'
 temp = f'{{__name__=~".*_temp_c[0-9]+_temp_celsius",{sel}}}'
+valid_temp = f'({temp} > 0)'
 usage = f'{{__name__=~"c[0-9]+_usage_meter_core_usage_total",{sel}}}'
 throttle64 = f'{{__name__=~"c[0-9]+_pvp_throttle_64_.*",{sel}}}'
 throttle1024 = f'{{__name__=~"c[0-9]+_pvp_throttle_1024_.*",{sel}}}'
+freshness_age = f'time() - min(timestamp(label_replace({{{sel}}},"metric","$1","__name__","(.+)")))'
+fivr_scope = 'PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"'
+c_fivr_raw = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]",PMTGuid="0x22806802",{fivr_scope}}}'
+c_fivr_available = f'{{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22806802",{fivr_scope}}}'
+c_fivr_status = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_status_[0-9]{{2}}",PMTGuid="0x22806802",{fivr_scope}}}'
+io_fivr_available = f'{{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22491753",{fivr_scope}}}'
+c_fivr_healthy = (
+    f'(count({c_fivr_raw}) > bool 0) * '
+    f'(count({c_fivr_raw} == 0) == bool count({c_fivr_raw})) * '
+    f'(min({c_fivr_available}) == bool 1)'
+    f' or vector(-1)'
+)
+c_fivr_nonzero_count = f'count({c_fivr_status} != 0) or vector(0)'
+c_fivr_nonzero_detail = (
+    f'label_replace(label_replace(({c_fivr_status} != 0),'
+    f'"slot","$1","__name__",".*_status_([0-9]{{2}})"),'
+    f'"monitor","$1","__name__",".*_fivr_health_monitor_([0-2])_status_.*")'
+)
+io_deadbeef_percent = f'(100 * count({io_fivr_available} == 0) / count({io_fivr_available})) or vector(-1)'
+demo_ready = f'(min(up{{job=~"otel-pmt.*"}}) == bool 1) * ({freshness_age} < bool 45)'
+healthy_mapping = [{"type": "value", "options": {
+    "-1": {"color": "gray", "index": 0, "text": "No Data"},
+    "0": {"color": "red", "index": 1, "text": "Unhealthy"},
+    "1": {"color": "green", "index": 2, "text": "Healthy"},
+}}]
+demo_ready_mapping = [{"type": "value", "options": {
+    "0": {"color": "red", "index": 0, "text": "Attention"},
+    "1": {"color": "green", "index": 1, "text": "Ready"},
+}}]
+deadbeef_mapping = [{"type": "value", "options": {
+    "-1": {"color": "gray", "index": 0, "text": "No Data"},
+    "0": {"color": "green", "index": 1, "text": "Available"},
+    "100": {"color": "orange", "index": 2, "text": "DEADBEEF"},
+}}]
+qat_throughput_mapping = [{"type": "value", "options": {
+    "0": {"color": "gray", "index": 0, "text": "Idle · No QAT Workload"},
+}}]
+qat_latency_mapping = [{"type": "value", "options": {
+    "-2": {"color": "gray", "index": 0, "text": "No Data"},
+    "-1": {"color": "gray", "index": 1, "text": "Idle · No QAT Traffic"},
+}}]
 
-row("01 · Fleet health / 采集总览", "先判断链路是否健康，再解释硬件指标。所有卡片都受顶部 Endpoint/Device/Access 筛选器控制。")
-add_stat("Collector", "Prometheus 是否能抓取 PMT Collector。1=UP，0=DOWN。", 0, 4,
-         'min(up{job=~"otel-pmt.*"})', thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}], color_mode="background")
-add_stat("PMT series", "当前筛选范围内的 time series 数。", 4, 4, f'count({{{sel}}})', unit="locale")
-add_stat("Metric names", "当前筛选范围内不同 metric 名称数。", 8, 4, f'count(count by (__name__) ({{{sel}}}))', unit="locale")
-add_stat("Scrape age", "最新 PMT Prometheus 样本年龄；超过 45 秒说明 scrape 可能停止。", 12, 4,
-         f'time() - max(timestamp(label_replace({temp},"metric","$1","__name__","(.+)")))', unit="s",
-         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 25}, {"color": "red", "value": 45}], color_mode="background")
-add_stat("Max core temp", "筛选范围内所有 core 的当前最高温度。", 16, 4, f'max({temp})', unit="celsius",
-         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 80}, {"color": "red", "value": 95}], color_mode="background")
-add_stat("Data loss Δ (5m)", "最近五分钟 aggregator data-loss gauge 的正向增量。", 20, 4,
-         f'sum(clamp_min(increase(agg_data_loss_count_total{{{sel}}}[5m]),0))', unit="locale",
-         thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 0.000001}], color_mode="background")
-advance(4)
+row("01 · Customer Demo Overview / 客户演示总览", "只回答三个问题：PMT数据是否可用、CPU当前最高温度、C-Die FIVR monitor是否出现非零状态。技术质量细节下沉到第07栏。")
+add_stat("PMT Demo Status", "Collector全部在线且当前筛选范围内最旧活跃样本不超过45秒时显示Ready；这是演示数据就绪状态，不是整机健康认证。", 0, 8,
+         demo_ready, unit="none",
+         thresholds=[{"color": "red", "value": None}, {"color": "green", "value": 1}],
+         color_mode="background", mappings=demo_ready_mapping, height=5, no_value="No PMT Data")
+add_stat("Highest Core Temperature", "当前所有有效Core中最高的温度；disabled Core的0°C占位值已排除。", 8, 8,
+         f'max({valid_temp})', unit="celsius",
+         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 80}, {"color": "red", "value": 95}],
+         color_mode="background", height=5, no_value="No Temperature Data")
+add_stat("C-Die FIVR Monitor", "全部公开2-bit slots为0且数据可用时显示Healthy；这是PMT项目运营约定，详细定位见第02栏。", 16, 8,
+         c_fivr_healthy, unit="none",
+         thresholds=[{"color": "gray", "value": None}, {"color": "red", "value": 0}, {"color": "green", "value": 1}],
+         color_mode="background", mappings=healthy_mapping, height=5, no_value="No FIVR Data")
+advance(5)
 
-add_timeseries("PMT series stability", "Series 数骤降常表示 XML、筛选范围或数据源发生变化。", 0, 8, 7, [
-    target(f'count({{{sel}}})', "PMT series", "A"),
-], unit="short")
-add_timeseries("Prometheus scrape duration", "Exporter scrape 耗时持续升高表示 Collector/Prometheus 压力或 series 增长。", 8, 8, 7, [
-    target('scrape_duration_seconds{job=~"otel-pmt.*"}', "{{job}} · {{instance}}", "A"),
-], unit="s", minimum=0)
-add_timeseries("Data-loss trend by source", "累计值非零不一定是当前故障；重点观察曲线是否继续增加。", 16, 8, 7, [
-    target(f'agg_data_loss_count_total{{{sel}}}', "{{CollectionMode}} · dev{{DeviceId}} / access{{AccessId}}", "A")
-], unit="locale", minimum=0)
+add_text(
+    "How to Read This Demo / 如何阅读",
+    "这三个卡片分别表示 **PMT采集是否就绪**、**当前最高Core温度** 和 **C-Die FIVR monitor结果**。"
+    "绿色不等于完整服务器健康认证；data loss、来源清单和内部时间戳属于技术诊断信息，统一放在第07栏。",
+    0, 24, 3,
+)
+advance(3)
+
+add_timeseries("CPU Core Temperature Trend", "有效Core的最高与平均温度趋势；客户演示优先关注是否接近80°C/95°C阈值。", 0, 24, 7, [
+    target(f'max by(CollectionMode) ({valid_temp})', "{{CollectionMode}} · Max", "A"),
+    target(f'avg by(CollectionMode) ({valid_temp})', "{{CollectionMode}} · Average", "B"),
+], unit="celsius", minimum=0, maximum=110)
 advance(7)
 
-row("02 · Thermal / 全 Core 热状态", "显示所有 core，而不是只固定 core 0。使用 Device/Access 变量缩小范围。")
-core_labeled_temp = f'label_replace({temp},"core","$1","__name__",".*_temp_c([0-9]+)_temp_celsius")'
-add_bar_gauge("Hottest cores now", "当前最热的 32 条 core series；温度阈值 80°C/95°C。", 0, 9, 10,
-              f'topk(32,{core_labeled_temp})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "celsius", 0, 110,
+row("02 · FIVR Health & Diagnostics / FIVR 健康与定位", "C-Die 非零码按项目运营约定显示 Unhealthy，并定位到实例、monitor 与 slot；该约定不是 XML 官方状态枚举。")
+add_stat("C-Die Overall Status", "数据可用且 576 个公开 2-bit slots 全为 0 时显示 Healthy；任一非零码按项目运营约定显示 Unhealthy。", 0, 8,
+         c_fivr_healthy, unit="none",
+         thresholds=[{"color": "gray", "value": None}, {"color": "red", "value": 0}, {"color": "green", "value": 1}],
+         color_mode="background", mappings=healthy_mapping)
+add_stat("C-Die Non-Zero Slots", "当前筛选范围中值为 1、2 或 3 的 C-Die 2-bit slot 数量。", 8, 8,
+         c_fivr_nonzero_count, unit="short",
+         thresholds=[{"color": "green", "value": None}, {"color": "red", "value": 1}],
+         color_mode="background")
+add_stat("IO-Die FIVR Data", "IO-Die 当前返回 0xDEADBEEFDEADBEEF；这是数据不可用 sentinel，不代表硬件故障。", 16, 8,
+         io_deadbeef_percent, unit="none",
+         thresholds=[{"color": "gray", "value": None}, {"color": "green", "value": 0}, {"color": "orange", "value": 100}],
+         color_mode="background", mappings=deadbeef_mapping)
+advance(4)
+add_fivr_detail_table(
+    "C-Die Non-Zero Slot Locator",
+    "仅列出非零状态码；空表表示未检测到非零 slot。位置可定位到 C-Die 实例、monitor 和 slot，但 XML 未提供对应 rail/core 或 code 1/2/3 的官方含义。",
+    0, 24, 9, c_fivr_nonzero_detail,
+)
+advance(9)
+
+row("03 · Thermal / 温度状态", "0°C 样本全部来自 disabled core，已从所有温度统计和曲线中排除。")
+core_labeled_temp = f'label_replace({valid_temp},"core","$1","__name__",".*_temp_c([0-9]+)_temp_celsius")'
+add_bar_gauge("Hottest Cores Now", "当前温度最高的 16 条有效 core series。", 0, 9, 10,
+              f'topk(16,{core_labeled_temp})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "celsius", 0, 110,
               [{"color": "green", "value": None}, {"color": "yellow", "value": 80}, {"color": "red", "value": 95}])
-add_timeseries("Top 20 core temperature history", "选定时间范围内当前最热 20 条 core 曲线。", 9, 15, 10, [
-    target(f'topk(20,{core_labeled_temp})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}")
+add_timeseries("Hottest Core History", "选定时间范围内当前最热的 12 条有效 core 曲线。", 9, 15, 10, [
+    target(f'topk(12,{core_labeled_temp})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}")
 ], unit="celsius", minimum=0, maximum=110)
 advance(10)
-add_timeseries("Thermal envelope", "最高、平均、最低温度形成平台热包络，便于识别整体升温与局部热点。", 0, 12, 7, [
-    target(f'max({temp})', "Maximum", "A"), target(f'avg({temp})', "Average", "B"), target(f'min({temp})', "Minimum", "C")
+add_timeseries("Thermal Envelope by Source", "有效 core 的最高、平均、最低温度；不包含 disabled core 的 0°C 占位值。", 0, 12, 7, [
+    target(f'max by(CollectionMode) ({valid_temp})', "{{CollectionMode}} · Max", "A"),
+    target(f'avg by(CollectionMode) ({valid_temp})', "{{CollectionMode}} · Average", "B"),
+    target(f'min by(CollectionMode) ({valid_temp})', "{{CollectionMode}} · Min", "C"),
 ], unit="celsius", minimum=0, maximum=110)
-add_timeseries("Selected Core $core temperature", "由顶部 Core 变量选择逻辑 core；可能因多个 Device/Access 产生多条曲线。", 12, 12, 7, [
-    target(f'{{__name__=~".*_temp_c${{core}}_temp_celsius",{sel}}}', "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
+add_timeseries("Selected Core $core", "所选 core 的有效温度；disabled core 不显示 0°C。", 12, 12, 7, [
+    target(f'({{__name__=~".*_temp_c${{core}}_temp_celsius",{sel}}} > 0)', "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
 ], unit="celsius", minimum=0, maximum=110)
 advance(7)
 
-row("03 · Core activity & throttling / 活动与节流", "Usage 是累计相对使用量的变化率，不是直接百分比；Throttle 是最近窗口内的节流计数。")
+row("04 · Core Activity / Core 活动", "PMT experimental usage meter 显示 XML 定义的累计 relative-usage level 变化率；它不是 Linux CPU utilization 百分比。")
 core_usage = f'label_replace({usage},"core","$1","__name__","c([0-9]+)_usage_meter_core_usage_total")'
-add_timeseries("Top core usage change rates", "累计 usage gauge 的 5 分钟正向变化率，显示最高 20 条。", 0, 12, 9, [
-    target(f'topk(20,clamp_min(delta({core_usage}[5m:])/300,0))', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}")
-], unit="ops", minimum=0)
-add_timeseries("Selected Core $core usage rate", "选定 core 的 usage 5 分钟变化率。", 12, 12, 9, [
-    target(f'clamp_min(delta(c${{core}}_usage_meter_core_usage_total{{{sel}}}[5m])/300,0)', "D{{DeviceId}}/A{{AccessId}}")
-], unit="ops", minimum=0)
+add_timeseries("PMT Core Relative Usage Rate", "experimental accumulated relative-usage level 的每秒变化率；用于比较 PMT local-core slots 的相对活动，不可解释为 Linux CPU%。", 0, 14, 9, [
+    target(f'topk(16,clamp_min(rate({core_usage}[5m:]),0))', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}")
+], unit="short", minimum=0, no_value="No PMT Data", decimals=6)
+add_timeseries("Selected PMT Core $core Usage Rate", "所选编号是 PMT aggregator local core slot，不是 Linux CPU 编号；曲线是 experimental usage counter 的每秒变化率。", 14, 10, 9, [
+    target(f'clamp_min(rate(c${{core}}_usage_meter_core_usage_total{{{sel}}}[5m]),0)', "D{{DeviceId}}/A{{AccessId}}")
+], unit="short", minimum=0, no_value="No PMT Data", decimals=6)
 advance(9)
 core_throttle64 = f'label_replace({throttle64},"core","$1","__name__","c([0-9]+)_pvp_throttle_64_.*")'
 core_throttle1024 = f'label_replace({throttle1024},"core","$1","__name__","c([0-9]+)_pvp_throttle_1024_.*")'
-add_bar_gauge("Throttle · 64-cycle window", "最近 64 cycles 窗口内 throttle 计数最高的 24 条。", 0, 12, 9,
-              f'topk(24,{core_throttle64})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "locale", 0)
-add_bar_gauge("Throttle · 1024-cycle window", "最近 1024 cycles 窗口内 throttle 计数最高的 24 条。", 12, 12, 9,
-              f'topk(24,{core_throttle1024})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "locale", 0)
-advance(9)
+add_bar_gauge("Throttle · 64-Cycle Window", "最近 64 cycles 窗口内 throttle 值最高的 16 条。", 0, 12, 8,
+              f'topk(16,{core_throttle64})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "short", 0)
+add_bar_gauge("Throttle · 1024-Cycle Window", "最近 1024 cycles 窗口内 throttle 值最高的 16 条。", 12, 12, 8,
+              f'topk(16,{core_throttle1024})', "Core {{core}} · D{{DeviceId}}/A{{AccessId}}", "short", 0)
+advance(8)
 
-row("04 · Selected Core operating range / Core 运行区间", "选择 Core 后查看最近 5 分钟在各物理区间的驻留百分比。它是时间分布，不是瞬时频率或瞬时电压。当前 PMT schema 仅提供瞬时温度；没有可安全展示的瞬时频率/电压 gauge。")
+row("05 · Core $core Operating Residency / 运行驻留分布", "使用页面顶部“05 Residency window”选择统计窗口；显示该窗口内的频率、温度和电压驻留占比，不代表瞬时值。低于0.1%的区间隐藏。")
 histogram_ranges = {
     "freq": ["C6 sleep", "≤800 MHz", "900–1200 MHz", "1300–1600 MHz", "1700–2000 MHz", "2100–2400 MHz", "2500–2800 MHz", "2900–3200 MHz", "3300–3600 MHz", "3700–4000 MHz", "4100–4400 MHz", ">4400 MHz"],
     "temp": ["<20 °C", "20.5–27.5 °C", "28–35 °C", "35.5–42.5 °C", "43–50 °C", "50.5–57.5 °C", "58–65 °C", "65.5–72.5 °C", "73–80 °C", "80.5–87.5 °C", "88–95 °C", ">95 °C"],
     "volt": ["<602 mV", "602.5–657 mV", "657.5–712 mV", "712.5–767 mV", "767.5–822 mV", "822.5–877 mV", "877.5–932 mV", "932.5–987 mV", "987.5–1042 mV", "1042.5–1097 mV", "1097.5–1152 mV", ">1152 mV"],
 }
-for x, kind, title_text in [(0, "freq", "Frequency residency"), (8, "temp", "Temperature residency"), (16, "volt", "Voltage residency")]:
+for kind, title_text, height in [
+    ("freq", "Frequency Residency", 7),
+    ("temp", "Temperature Residency", 5),
+    ("volt", "Voltage Residency", 8),
+]:
     total_rate = " + ".join(
-        f'sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[5m]))'
+        f'sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[${{residency_window}}]))'
         for bucket in range(12)
     )
-    add_timeseries(f"{title_text} · Core $core", "每条色带表示最近 5 分钟落入该物理区间的时间占比；所有色带合计约 100%。", x, 8, 9,
-                   [
-                       target(
-                           f'100 * sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[5m])) / clamp_min({total_rate}, 1e-12)',
-                           histogram_ranges[kind][bucket], chr(ord("A") + bucket),
-                       )
-                       for bucket in range(12)
-                   ], unit="percent", minimum=0, maximum=100, stacking="normal", legend_place="right")
-advance(9)
+    range_expr = " or ".join(
+        f'label_replace((100 * sum(rate(c${{core}}_{kind}_hist_r{bucket}_second_total{{{sel}}}[${{residency_window}}])) '
+        f'/ clamp_min({total_rate}, 1e-12)) > 0.1,'
+        f'"range","{histogram_ranges[kind][bucket]}","__name__",".*")'
+        for bucket in range(12)
+    )
+    add_residency_bar(title_text, "所选 $residency_window 窗口的加权驻留占比；低于0.1%的区间隐藏。",
+                      0, 24, height, range_expr)
+    advance(height)
 
-row("05 · Memory, CHA & accelerator / 内存·缓存代理·QAT", "RDT MBM/CMT、CHA enable mask 与 QAT telemetry。大量同类 metrics 采用 Top-K，避免一次绘制数千条曲线。")
+row("06 · Memory & Accelerator / 内存与加速器", "只展示具有明确语义且对平台状态有直接价值的指标。")
 mbm_total = f'{{__name__=~"cha[0-9]+_rmid[0-9]+_rdt_mbm_total",{sel}}}'
-mbm_local = f'{{__name__=~"cha[0-9]+_rmid[0-9]+_rdt_mbm_local_total",{sel}}}'
-cmt = f'{{__name__=~"cha[0-9]+_rmid[0-9]+_rdt_cmt_total",{sel}}}'
-add_timeseries("Top RDT MBM total activity", "CHA/RMID total memory transaction gauge 的 5 分钟正向变化率。", 0, 12, 9, [
-    target(f'topk(20,clamp_min(rate(label_replace({mbm_total},"channel","$1","__name__","(cha[0-9]+_rmid[0-9]+)_rdt_mbm_total")[5m:]),0))', "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
+qat_throughput = (
+    f'sum(rate(label_replace({{__name__=~"qat[01]_tl_bw_(in|out)_megabytes_total",{sel}}},'
+    f'"metric","$1","__name__","(.+)")[5m:]))'
+)
+qat_average_latency = f'max({{__name__=~"qat[01]_avg_.*_nanoseconds",{sel}}})'
+qat_latency_state = (
+    f'({qat_average_latency} and on() ({qat_throughput} > 0))'
+    f' or (vector(-1) and on() ({qat_throughput} == 0))'
+    f' or (vector(-2) unless on() {qat_throughput})'
+)
+add_timeseries("RDT Memory Transaction Rate", "MBM total counter 的 5 分钟平均每秒变化率。", 0, 12, 9, [
+    target(f'topk(16,clamp_min(rate(label_replace({mbm_total},"channel","$1","__name__","(cha[0-9]+_rmid[0-9]+)_rdt_mbm_total")[5m:]),0))', "{{channel}} · D{{DeviceId}}/A{{AccessId}}")
 ], unit="ops", minimum=0)
-add_timeseries("Top RDT MBM local activity", "CHA/RMID local memory transaction gauge 的 5 分钟正向变化率。", 12, 12, 9, [
-    target(f'topk(20,clamp_min(rate(label_replace({mbm_local},"channel","$1","__name__","(cha[0-9]+_rmid[0-9]+)_rdt_mbm_local_total")[5m:]),0))', "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
-], unit="ops", minimum=0)
+add_stat("QAT PCIe Throughput", "QAT0/QAT1 inbound 与 outbound throughput 总和；0 MB/s 明确显示为 Idle，表示当前 workload 未向 QAT 提交任务。", 12, 6,
+         qat_throughput, unit="MBs",
+         thresholds=[{"color": "gray", "value": None}, {"color": "blue", "value": 0.000001}],
+         color_mode="value", mappings=qat_throughput_mapping, height=9, no_value="No Data")
+add_stat("QAT Average Latency", "有 QAT traffic 时显示所有 average-latency gauge 的最大值；无 traffic 时显示 Idle，而不是误导性的 0 ns。", 18, 6,
+         qat_latency_state, unit="ns",
+         thresholds=[{"color": "gray", "value": None}, {"color": "blue", "value": 0}],
+         color_mode="value", mappings=qat_latency_mapping, height=9, no_value="No Data")
 advance(9)
-add_bar_gauge("Top RDT CMT occupancy", "当前 CHA/RMID cache monitoring technology 值最高的 24 条。", 0, 8, 10,
-              f'topk(24,label_replace({cmt},"channel","$1","__name__","(cha[0-9]+_rmid[0-9]+)_rdt_cmt_total"))', "{{channel}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}", "locale", 0)
-add_bar_gauge("CHA enabled state", "当前 CHA enable mask。1 表示 enabled，0 表示 disabled。", 8, 8, 10,
-              f'max by(cha,DeviceId)(label_replace({{__name__=~"cha_enabled_mask_cha_[0-9]+_en",{sel}}},"cha","$1","__name__","cha_enabled_mask_cha_([0-9]+)_en"))', "CHA {{cha}} · D{{DeviceId}}", "short", 0, 1,
-              [{"color": "red", "value": None}, {"color": "green", "value": 1}])
-add_timeseries("QAT bandwidth", "QAT0/QAT1 telemetry 的 in/out megabytes 当前值。", 16, 8, 10, [
-    target(f'{{__name__=~"qat[01]_tl_bw_(in|out)_megabytes_total",{sel}}}', "{{__name__}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
-], unit="MBs", minimum=0, legend_place="right")
-advance(10)
-add_timeseries("QAT average latency", "QAT 平均 page request、translation、read 和 GP latency。", 0, 12, 8, [
-    target(f'{{__name__=~"qat[01]_avg_.*_nanoseconds",{sel}}}', "{{__name__}} · D{{DeviceId}}/A{{AccessId}}")
-], unit="ns", minimum=0, legend_place="right")
-add_timeseries("QAT maximum latency", "QAT max read/general-purpose latency。", 12, 12, 8, [
-    target(f'{{__name__=~"qat[01]_tl_max_(gp|rd)_lat_nanoseconds_total",{sel}}}', "{{__name__}} · {{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}")
-], unit="ns", minimum=0, legend_place="right")
-advance(8)
 
-row("06 · Inventory & collection quality / 拓扑与采集质量", "展示当前设备/Access 来源、core enable 状态和 data-loss 明细。")
-add_table("PMT source inventory", "每个 DeviceId/AccessId/SourceId 当前拥有的 series 数。", 0, 12, 10, [
+row("07 · Technical Diagnostics / 技术诊断", "客户演示通常无需展开。Data loss绝对值是历史累计；只有多个PMT更新窗口持续增长，或workload停止后仍增长，才需要升级调查。")
+add_table("PMT Source Inventory", "每个 Device/Access/Source 当前拥有的 series 数。", 0, 12, 9, [
     target(f'count by (DeviceId,AccessId,SourceId,DeviceType,AccessType) ({{{sel}}})', "", instant=True, fmt="table")
 ])
-add_table("Data-loss detail", "当前 data-loss count 与 timestamp；timestamp 单位为 25MHz crystal-clock TSC ticks。", 12, 12, 10, [
-    target(f'agg_data_loss_count_total{{{sel}}}', "", "A", True, "table"),
-    target(f'agg_data_loss_timestamp_total{{{sel}}}', "", "B", True, "table"),
+add_table("Aggregator Update Exceptions", "技术质量明细：历史累计count、最近15分钟新增量和最近事件的25MHz内部timestamp。短暂非零不等于CPU故障。", 12, 12, 9, [
+    target(f'agg_data_loss_count_total{{{sel}}}', "Historical count", "A", True, "table"),
+    target(f'agg_data_loss_timestamp_total{{{sel}}}', "Last event · 25MHz ticks", "B", True, "table"),
+    target(f'clamp_min(increase(agg_data_loss_count_total{{{sel}}}[15m]),0)', "Increase · last 15m", "C", True, "table"),
 ])
-advance(10)
-add_bar_gauge("Core enabled state", "所有 core enable flags。1=enabled，0=disabled。", 0, 12, 10,
-              f'max by(core,DeviceId)(label_replace({{__name__=~"core_en_c[0-9]+_en",{sel}}},"core","$1","__name__","core_en_c([0-9]+)_en"))', "Core {{core}} · D{{DeviceId}}", "short", 0, 1,
-              [{"color": "red", "value": None}, {"color": "green", "value": 1}])
-add_timeseries("Data-loss positive delta by source", "最近五分钟新增 data loss；持续大于 0 时，期间同 aggregator 的其他 samples 可能不可靠。", 12, 12, 10, [
-    target(f'clamp_min(increase(agg_data_loss_count_total{{{sel}}}[5m]),0)', "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}")
-], unit="locale", minimum=0)
-advance(10)
+advance(9)
 
-row("07 · FIVR evidence and limits / FIVR 实测结果与解析边界", "不是解析器故障：精确 XML 已定位三个 64-bit words，并按每 2 bits 拆分。限制在于 Intel-PMT metadata 没有提供 index→rail 和 code 0/1/2/3→含义的映射。")
-fivr_available = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_available",{sel}}}'
-fivr_nonzero = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]_nonzero_status_count",{sel}}}'
-c_fivr_raw = f'{{__name__=~"fivr_health_monitor_[0-2]_[0-2]_fivr_health_monitor_[0-2]",PMTGuid="0x22806802",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}}'
-io_fivr_available = f'{{__name__=~"fivr_health_monitor_.*_available",PMTGuid="0x22491753",PMTEndpoint="$endpoint",CollectionMode=~"$mode",DeviceId=~"$device",AccessId=~"$access"}}'
-add_stat("C-Die words exactly 0x0", "实测 C-Die 三组 packed words 中等于 0x0000000000000000 的比例；当前 Redfish 与 in-band 均为 100%。", 0, 8,
-         f'100 * count({c_fivr_raw} == 0) / count({c_fivr_raw})', unit="percent",
-         thresholds=[{"color": "yellow", "value": None}, {"color": "green", "value": 100}], color_mode="background")
-add_stat("C-Die non-zero 2-bit slots", "按 XML 的每 2 bits 拆分后，所有非零 slot 的总数。当前为 0；但公开 metadata 未明确写出 code 0 的文字含义。", 8, 8,
-         f'sum({fivr_nonzero})', unit="locale",
-         thresholds=[{"color": "blue", "value": None}], color_mode="background")
-add_stat("IO-Die words = DEADBEEF", "IO-Die 三组 words 中识别为 0xDEADBEEFDEADBEEF sentinel 的比例。100% 表示 payload 未提供状态，不表示 FIVR 故障。", 16, 8,
-         f'100 * count({io_fivr_available} == 0) / count({io_fivr_available})', unit="percent",
-         thresholds=[{"color": "green", "value": None}, {"color": "yellow", "value": 1}], color_mode="background")
-advance(4)
-
-add_bar_gauge("Packed-word availability by die and source", "按 die/source 汇总：1=存在真实 packed word；0=三个位置返回 DEADBEEF sentinel。", 0, 12, 10,
-              f'min by(PMTGuid,DeviceId,AccessId,CollectionMode) ({fivr_available})', "{{CollectionMode}} · {{PMTGuid}} · D{{DeviceId}}/A{{AccessId}}", "short", 0, 1,
-              [{"color": "red", "value": None}, {"color": "green", "value": 1}])
-add_text("What is decoded—and what is missing / 已解析内容与缺失定义", """### Verified on avc01
-
-- **C-Die:** all three 64-bit monitor words are `0x0` on every exposed instance, through both Redfish and in-band PMT.
-- **IO-Die:** all three locations are `0xDEADBEEFDEADBEEF` on every instance, through both paths. This is an unavailable/debug sentinel, not 32 meaningful status values.
-- **XML proves:** each word contains **2 bits per FIVR**.
-- **XML does not provide:** which rail each slot represents, or what codes `0/1/2/3` mean. The same omission exists in production, preproduction, generated JSON, and upstream history.
-
-Therefore C-Die can be reported as **“all published packed fields are zero”** and IO-Die as **“status unavailable”**. A named Healthy/Warning/Fault result requires the internal GNR PUNIT/FIVR register codebook or corrected Intel metadata.""", 12, 12, 10)
-advance(10)
-
-row("08 · Metric Explorer / 全量搜索", "在顶部 Metric 中输入名称片段即可搜索全部 PMT metrics。查询使用 __name__ selector，避免动态 metric 名拼接失败。")
-explorer_selector = f'{{__name__="$metric",{sel}}}'
-add_timeseries("$metric · raw history", "原始历史值。请先在 metric catalog 确认 TYPE、HELP 和单位；counter 与 gauge 的解释方式不同。", 0, 16, 11, [
-    target(explorer_selector, "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}")
-], unit="short", legend_place="right")
-add_table("$metric · current series & labels", "显示选中 metric 当前每条 series 的完整来源标签和值。", 16, 8, 11, [
-    target(explorer_selector, "", instant=True, fmt="table")
-])
-advance(11)
-add_timeseries("$metric · 5-minute change per second", "Counter 看 rate；累计 gauge 看 delta ÷ 300。两条算法同时展示仅为诊断，请依据 catalog 的 TYPE 选用。", 0, 24, 8, [
-    target(f'rate({explorer_selector}[5m])', "counter rate/s · D{{DeviceId}}/A{{AccessId}}", "A"),
-    target(f'delta({explorer_selector}[5m])/300', "gauge Δ/s · D{{DeviceId}}/A{{AccessId}}", "B"),
-], unit="short")
-advance(8)
+row("08 · Advanced Metric Explorer / 高级指标搜索", "Grafana原生变量只能位于页面顶部，无法嵌入某个row；因此高级搜索已拆分为独立页面，让搜索框和结果紧邻显示。")
+add_text(
+    "Open Advanced Metric Explorer / 打开高级指标搜索",
+    "主Dashboard不再显示面向技术人员的全局Metric搜索框。"
+    "请打开 **[Intel PMT · Advanced Metric Explorer](/d/pmt-avc01-metric-explorer"
+    "?var-endpoint=$endpoint&var-mode=$mode&var-device=$device&var-access=$access&var-die=$die)**；"
+    "新页面顶部选择Metric，结果立即显示在下方。",
+    0, 24, 5,
+)
+advance(5)
 
 variables = [
     {"name": "endpoint", "label": "Endpoint", "type": "query", "datasource": DATASOURCE,
@@ -323,7 +438,7 @@ variables = [
     "query": {"query": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)", "refId": "PrometheusVariableQueryEditor-Mode"},
     "definition": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)", "refresh": 1, "sort": 1,
     "includeAll": True, "allValue": ".*", "multi": True,
-    "current": {"selected": True, "text": ["All"], "value": ["$__all"]}},
+    "current": {"selected": True, "text": ["redfish"], "value": ["redfish"]}},
     {"name": "device", "label": "Device", "type": "query", "datasource": DATASOURCE,
     "query": {"query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)", "refId": "PrometheusVariableQueryEditor-Device"},
     "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},DeviceId)", "refresh": 1, "sort": 3,
@@ -342,34 +457,115 @@ variables = [
     {"name": "core", "label": "Core", "type": "custom",
      "query": ",".join(str(index) for index in range(128)), "options": [],
      "current": {"selected": True, "text": "0", "value": "0"}},
-    {"name": "metric", "label": "Metric (search all)", "type": "query", "datasource": DATASOURCE,
-    "query": {"query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},__name__)", "refId": "PrometheusVariableQueryEditor-Metric"},
-    "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\"},__name__)", "refresh": 1, "sort": 1,
-    "current": {"selected": True, "text": "c0_c1_c2_c3_temp_c0_temp_celsius", "value": "c0_c1_c2_c3_temp_c0_temp_celsius"}},
+    {"name": "residency_window", "label": "05 Residency window", "type": "custom",
+     "query": "2m,5m,10m,15m,30m,1h", "options": [],
+     "current": {"selected": True, "text": "5m", "value": "5m"}},
 ]
+
+metric_variable = {
+    "name": "metric", "label": "Search metric", "type": "query", "datasource": DATASOURCE,
+    "query": {"query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)", "refId": "PrometheusVariableQueryEditor-Metric"},
+    "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=~\"$mode\",DeviceId=~\"$device\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)", "refresh": 1, "sort": 1,
+    "current": {"selected": True, "text": "c0_c1_c2_c3_temp_c0_temp_celsius", "value": "c0_c1_c2_c3_temp_c0_temp_celsius"},
+}
 
 dashboard = {
     "annotations": {"list": [{
         "builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": True,
         "hide": True, "iconColor": "rgba(255, 96, 96, 1)", "name": "Annotations & Alerts", "type": "dashboard",
     }]},
-    "description": "Unified BMC Redfish and in-band Intel PMT observability with exact-schema GNR PUNIT/FIVR decoding and all-metric exploration.",
+    "description": "Customer-facing Intel PMT demo: collection readiness, CPU temperature, FIVR status, operating residency, and clearly separated technical diagnostics.",
     "editable": True, "fiscalYearStartMonth": 0, "graphTooltip": 1,
-    "links": [{"asDropdown": False, "icon": "doc", "includeVars": False, "keepTime": False,
-               "tags": [], "targetBlank": True, "title": "Metric catalog (repository)",
-               "tooltip": "See docs/pmt-metrics-catalog.csv for HELP and TYPE", "type": "link",
-               "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/pmt-metrics-catalog.csv"}],
+    "links": [
+        {"asDropdown": False, "icon": "search", "includeVars": True, "keepTime": True,
+         "tags": [], "targetBlank": False, "title": "Advanced Metric Explorer",
+         "tooltip": "Open metric search with results directly below the controls", "type": "link",
+         "url": "/d/pmt-avc01-metric-explorer"},
+        {"asDropdown": False, "icon": "doc", "includeVars": False, "keepTime": False,
+         "tags": [], "targetBlank": True, "title": "Metric catalog (repository)",
+         "tooltip": "See docs/pmt-metrics-catalog.csv for HELP and TYPE", "type": "link",
+         "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/pmt-metrics-catalog.csv"},
+    ],
     "liveNow": True, "panels": panels, "refresh": "20s", "schemaVersion": 41,
     "tags": ["Intel PMT", "Redfish", "in-band", "GNR", "FIVR", "hardware telemetry", "comprehensive"],
     "templating": {"list": variables}, "time": {"from": "now-30m", "to": "now"},
     "timepicker": {"refresh_intervals": ["5s", "10s", "20s", "30s", "1m", "5m"],
                    "time_options": ["5m", "15m", "30m", "1h", "6h", "12h", "24h", "7d"]},
-    "timezone": "browser", "title": "Intel PMT · BMC + In-band Telemetry", "uid": "pmt-avc01-redfish", "version": 17,
+    "timezone": "browser", "title": "Intel PMT · Customer Telemetry Demo", "uid": "pmt-avc01-redfish", "version": 29,
 }
 
 serialized = json.dumps(dashboard, indent=2, ensure_ascii=False) + "\n"
 REPO_OUTPUT.write_text(serialized, encoding="utf-8")
 SYSTEM_OUTPUT.write_text(serialized, encoding="utf-8")
-print(f"Generated {len(panels)} panels ({sum(p['type'] == 'row' for p in panels)} rows)")
+main_panel_count = len(panels)
+main_row_count = sum(panel["type"] == "row" for panel in panels)
+
+# Grafana dashboard variables are always rendered at page level and cannot be
+# placed inside row 08. Keep the customer dashboard uncluttered and generate a
+# dedicated explorer where the metric search control sits directly above the
+# result panels.
+panels = []
+panel_id = 0
+y = 0
+row("Metric Search Results / 指标搜索结果", "先在页面顶部的Search metric中选择名称；下方立即显示历史、当前series与变化率。")
+add_text(
+    "How to Use / 使用方法",
+    "1. 在顶部 **Search metric** 输入关键词并选择准确名称；"
+    "2. Raw History适合gauge/current value；"
+    "3. 5-Minute Change同时提供counter rate和gauge delta，必须结合Metric catalog中的type与HELP解释。",
+    0, 24, 3,
+)
+advance(3)
+explorer_selector = f'{{__name__="$metric",{sel}}}'
+add_timeseries("$metric · Raw History", "所选metric的原始历史值；counter绝对值通常不表示当前强度。", 0, 16, 10, [
+    target(explorer_selector, "{{CollectionMode}} · D{{DeviceId}}/A{{AccessId}}/S{{SourceId}}")
+], unit="short", legend_place="right")
+add_table("$metric · Current Series", "当前值及其完整来源标签。", 16, 8, 10, [
+    target(explorer_selector, "", instant=True, fmt="table")
+])
+advance(10)
+add_timeseries("$metric · 5-Minute Change", "Counter查看rate/s；gauge查看窗口首尾平均变化率。只解释与该metric type匹配的曲线。", 0, 24, 8, [
+    target(f'rate({explorer_selector}[5m])', "counter rate/s · D{{DeviceId}}/A{{AccessId}}", "A"),
+    target(f'delta({explorer_selector}[5m])/300', "gauge delta/s · D{{DeviceId}}/A{{AccessId}}", "B"),
+], unit="short")
+advance(8)
+
+explorer_variables = [
+    variable for variable in variables
+    if variable["name"] not in {"core", "residency_window"}
+] + [metric_variable]
+explorer_dashboard = {
+    "annotations": {"list": [{
+        "builtIn": 1, "datasource": {"type": "grafana", "uid": "-- Grafana --"}, "enable": True,
+        "hide": True, "iconColor": "rgba(255, 96, 96, 1)", "name": "Annotations & Alerts", "type": "dashboard",
+    }]},
+    "description": "Technical Intel PMT metric search with controls and results kept together.",
+    "editable": True, "fiscalYearStartMonth": 0, "graphTooltip": 1,
+    "links": [
+        {"asDropdown": False, "icon": "arrow-left", "includeVars": True, "keepTime": True,
+         "tags": [], "targetBlank": False, "title": "Back to Customer Demo",
+         "tooltip": "Return to the customer-facing PMT dashboard", "type": "link",
+         "url": "/d/pmt-avc01-redfish"},
+        {"asDropdown": False, "icon": "doc", "includeVars": False, "keepTime": False,
+         "tags": [], "targetBlank": True, "title": "Metric family reference",
+         "tooltip": "Read the value semantics, query guidance, and caveats", "type": "link",
+         "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/pmt-metric-family-reference.md"},
+    ],
+    "liveNow": True, "panels": panels, "refresh": "20s", "schemaVersion": 41,
+    "tags": ["Intel PMT", "metric explorer", "technical diagnostics"],
+    "templating": {"list": explorer_variables}, "time": {"from": "now-30m", "to": "now"},
+    "timepicker": {"refresh_intervals": ["5s", "10s", "20s", "30s", "1m", "5m"],
+                   "time_options": ["5m", "15m", "30m", "1h", "6h", "12h", "24h", "7d"]},
+    "timezone": "browser", "title": "Intel PMT · Advanced Metric Explorer",
+    "uid": "pmt-avc01-metric-explorer", "version": 1,
+}
+explorer_serialized = json.dumps(explorer_dashboard, indent=2, ensure_ascii=False) + "\n"
+REPO_EXPLORER_OUTPUT.write_text(explorer_serialized, encoding="utf-8")
+SYSTEM_EXPLORER_OUTPUT.write_text(explorer_serialized, encoding="utf-8")
+
+print(f"Generated main dashboard: {main_panel_count} panels ({main_row_count} rows)")
 print(REPO_OUTPUT)
 print(SYSTEM_OUTPUT)
+print(f"Generated metric explorer: {len(panels)} panels")
+print(REPO_EXPLORER_OUTPUT)
+print(SYSTEM_EXPLORER_OUTPUT)

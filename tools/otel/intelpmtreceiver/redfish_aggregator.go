@@ -55,6 +55,13 @@ func eval(equation string, params map[string]interface{}) (interface{}, error) {
 	if equation == "" {
 		return nil, errors.New("no transformation equation found")
 	}
+	// Raw samples are already uint64 values. XML may still apply an all-ones
+	// uint64 mask as an identity operation. gval evaluates numbers and bitwise
+	// operators through float64/int64, where 0xffffffffffffffff rounds to 2^64
+	// and then collapses positive values to zero during the bitwise AND.
+	// Remove only this redundant full-width identity mask before evaluation;
+	// narrower masks must remain intact.
+	equation = FullWidthUint64AndMask.ReplaceAllString(equation, "$1")
 	// gval doesn't support hexadecimals
 	equation = HexToDecRegex.ReplaceAllStringFunc(equation, hexToDec)
 	if equation == "" {

@@ -21,28 +21,29 @@ pretend that every planned PMT capability is collected.
 本 Dashboard 面向当前双路 GNR 服务器上**实际能够采集**的 PMT 数据。它不是
 TPAS 目录的可视化副本，也不会把规划中的 PMT 能力误写成当前已经采集的能力。
 
-It has three information layers:
+It has four information layers:
 
-1. **GNR Telemetry Overview** — 29 selected panels grouped into seven telemetry
-   domains;
-2. **Metric Explorer** — search and inspect all 5,285 metric names;
-3. **Metric references** — the 38-family reference and row-level CSV catalog.
+1. **GNR Redfish Overview** — 25 selected panels on the fixed OOB path;
+2. **GNR Local Overview** — the same 25 panels on the fixed in-band path;
+3. **Metric Explorer** — search and inspect all 5,285 metric names;
+4. **Metric references** — the 38-family reference and row-level CSV catalog.
 
-对应三层信息结构：
+对应四层信息结构：
 
-1. **GNR Telemetry Overview**：29 个精选 panel，按七个 telemetry domain 组织；
-2. **Metric Explorer**：搜索全部 5,285 个准确 metric names；
-3. **Metric references**：38 个 family 的详细参考和逐行 CSV catalog。
+1. **GNR Redfish Overview**：固定OOB路径的25个精选Panel；
+2. **GNR Local Overview**：固定in-band路径的同一组25个Panel；
+3. **Metric Explorer**：搜索全部 5,285 个准确 metric names；
+4. **Metric references**：38 个 family 的详细参考和逐行 CSV catalog。
 
 The previous dashboard (`pmt-avc01-redfish`) is preserved. The new dashboard is
 independent:
 
-- title: `Intel PMT · GNR Telemetry Overview · Internal`;
-- UID: `pmt-gnr-telemetry-overview`;
+- titles: `Intel PMT · GNR Redfish Overview · Internal` and
+  `Intel PMT · GNR Local Overview · Internal`;
+- UIDs: `pmt-gnr-redfish-overview` and `pmt-gnr-local-overview`;
 - generator: `tools/otel/generate_gnr_telemetry_overview.py`;
-- generated JSON: `tools/otel/dashboards/pmt-gnr-telemetry-overview.json`;
-- provisioned JSON:
-  `/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-telemetry-overview.json`.
+- generated JSON: `tools/otel/dashboards/pmt-gnr-redfish-overview.json` and
+  `tools/otel/dashboards/pmt-gnr-local-overview.json`;
 - paired Explorer UID: `pmt-gnr-metric-explorer`;
 - paired Explorer JSON: `tools/otel/dashboards/pmt-gnr-metric-explorer.json`.
 
@@ -123,23 +124,28 @@ For a first-time viewer:
 | Filter | Meaning / 含义 | Default / 默认 |
 |---|---|---|
 | Platform endpoint | Logical monitored platform / 被监控平台 | `avc01` |
-| Collection path | `redfish` OOB or `local` in-band / 带外或带内 | `redfish` |
-| Socket | Prometheus `DeviceId`; `All` keeps platform context / Socket筛选 | `All` |
-| CORE Aggregator access | Selects `AccessId` values that contain GUID `0x22473996` / 选择包含CORE Aggregator的Access | `All` |
-| XML Core field | Selects the Core N field defined by the CORE XML HELP / 选择XML定义的Core N字段 | `0` |
 
-The legend first identifies the Aggregator with raw source labels, then uses the
-Core number exactly as the XML HELP describes it:
+Each Overview has one global filter. Collection path is fixed by the Dashboard:
+Redfish or Local. Use the header link to switch paths while preserving endpoint
+and time range.
+
+The legend deliberately uses different locators for the two access paths, then
+uses the Core number exactly as the XML HELP describes it:
 
 ```text
-AGG[D<DeviceId>/A<AccessId>/S<SourceId>] · Core <XML number>
+Redfish: AGG[D<DeviceId>/A<AccessId>/S<SourceId>] · Core <XML number>
+Local:   AGG[<telemN>] · Core <XML number>
 ```
 
-For example, `AGG[D1/A248/S2] · Core 0` means that D1/A248/S2 locates the
-Aggregator instance and `Core 0` is the `C0_*` field inside that XML layout. It
-does not claim Linux CPU 0 or a globally numbered physical core. `AGG[...]` is
-Dashboard notation; `DeviceId`, `AccessId`, `SourceId`, `C0_TEMP` and the HELP
-text are the underlying source facts.
+For example, `AGG[D1/A248/S2] · Core 0` locates a Redfish Aggregator instance.
+`AGG[telem0] · Core 0` locates a Local sysfs PMT device on the host already
+selected by the `Platform endpoint` filter. Repeating `avc01` in every series
+would consume legend width without adding identity. The locator shape already
+identifies the path, so the legend also omits redundant `OOB` and `LOCAL`
+prefixes. In both cases, `Core 0` is the `C0_*` field inside that XML layout.
+It does not claim Linux CPU 0 or a globally numbered physical core. These two
+locators must not be treated as the same hardware instance until physical
+discovery mapping is complete.
 
 ## 5. Time model / 三层时间模型
 
@@ -198,7 +204,7 @@ unit without an approved formula and source.
 
 ## 7. Row and panel reference / 分区与Panel说明
 
-### 7.1 Row 00 — Customer Overview
+### 7.1 Row 00 — Overview
 
 The first row deliberately contains only four immediately readable results.
 Collection internals, topology and provenance are moved to the final sections.
@@ -239,33 +245,19 @@ CPU-only NPB or PAMPAR workloads should be `Idle`.
 
 ### 7.2 Row 01 — Core Environment & Activity
 
-- **Current Thermal Hotspots** shows the 12 hottest valid local-slot series.
-- **Temperature for Core N** shows the `C<N>_TEMP` field across the selected
-  CORE Aggregator scope.
+- **Top 12 Core Temperatures** shows the hottest current valid Core fields.
+- **Maximum Core Temperature Trend** shows one platform maximum over time.
 - **PMT Relative Activity** applies `rate()` to the experimental U64.38.26
-  counter and displays six decimals. It is not Linux CPU utilization percent.
+  counter, shows the highest per-Core rates and retains six decimals. It is not
+  Linux CPU utilization percent.
 - **Throttle Events · Last 5 Minutes** shows the five-minute increase for both
   64-cycle and 1024-cycle throttle families. A non-zero result does not identify
   thermal, power or voltage-regulator root cause.
 
-### 7.3 Row 02 — Core Operating Profile
+Detailed per-Core residency remains available through Metric Explorer and the
+metric-family reference instead of crowding the two Overview dashboards.
 
-Frequency, temperature and voltage profiles each use 12 accumulated residency
-counters:
-
-```text
-bucket share = 100 × rate(bucket[5m]) / sum(rate(all 12 buckets[5m]))
-```
-
-Buckets below 0.1% are hidden. The frequency profile includes C6 as its first
-range. A histogram bucket is not an instantaneous MHz, °C or mV reading.
-
-Cdyn uses the same relative display approach for six internal levels. The
-levels do not currently have a public business-facing frequency or voltage
-mapping. The five-minute interval is fixed in each panel and is not presented as
-a misleading global Dashboard variable.
-
-### 7.4 Row 03 — Uncore, RDT & Memory
+### 7.3 Overview Row 02 — Uncore, RDT & Memory
 
 - **RDT Memory Transaction Rates · Raw** compares MBM total and local counter
   rates. The transaction size is unresolved, so the panel does not use bytes/s.
@@ -275,7 +267,7 @@ a misleading global Dashboard variable.
   fields named read/write bandwidth counters. No byte scaling is proven.
 - **Enabled CHA Instances** is topology state, not cache utilization.
 
-### 7.5 Row 04 — Power Policy & FIVR
+### 7.4 Overview Row 03 — Power Policy & FIVR
 
 - **FIVR Operational Signals** displays the C-Die operational state, C-Die
   non-zero slot count and IO-Die availability.
@@ -289,7 +281,7 @@ a misleading global Dashboard variable.
 `DEADBEEF` is a firmware data-unavailable sentinel. It is not a FIVR failure
 code.
 
-### 7.6 Row 05 — Accelerator & I/O
+### 7.5 Overview Row 04 — Accelerator & I/O
 
 - **QAT PCIe Throughput** uses the proven cumulative megabyte counters and
   displays inbound/outbound `MB/s`.
@@ -298,7 +290,7 @@ code.
 
 When QAT is Idle, an average latency of 0 ns is not a valid performance result.
 
-### 7.7 Row 06 — Data Trust & Provenance
+### 7.6 Overview Row 05 — Data Trust & Provenance
 
 - **Data Freshness** separates a recently scraped pipeline from stale/no data.
 - **Update Quality** derives Stable/Intermittent/Sustained from
@@ -314,7 +306,7 @@ An old non-zero absolute count is not dangerous by itself. Escalate when growth
 is sustained across multiple windows, affects required Aggregators, persists
 after the workload ends, or is accompanied by a stalled update heartbeat.
 
-### 7.8 Row 07 — Technical Inventory & Topology
+### 7.7 Overview Row 06 — Technical Inventory & Topology
 
 This final engineering section is intentionally outside the customer-first
 reading flow:
@@ -371,7 +363,7 @@ is tested.
 | Mesh telemetry | GV and histogram-bin fields exist | Bin boundaries, unit and sampling semantics | Explorer/raw only |
 | Data-loss count | Incomplete internal processing-cycle counter and event timestamp | Total internal-cycle denominator and per-cycle missing-field count | No loss percentage |
 | Last-update timestamp | 25 MHz internal update timestamp | Calibrated mapping to wall-clock time | Use `changes()`, never display as date |
-| Core identity | DeviceId/AccessId/SourceId locate an Aggregator; XML defines Core N fields | Approved mapping from each Aggregator Core N field to Linux logical CPU and physical core IDs | Use `AGG[D/A/S] · Core N`; no Linux CPU claim |
+| Core identity | Redfish D/A/S or selected endpoint + Local telemN locates one access-path instance; XML defines Core N fields | Approved OOB↔Local physical-instance mapping and mapping from each Aggregator Core N field to Linux logical CPU and physical core IDs | Use compact `AGG[D/A/S]` or `AGG[telemN]`; no Linux CPU claim |
 | Firmware version | Raw image version field exists | Encoding format and release-name mapping | Provenance raw value |
 | QAT maximum latency | Maximum-latency fields exist | Reset/measurement-window semantics | Explorer only; never `rate(max)` |
 
@@ -418,15 +410,16 @@ python3 tools/otel/generate_gnr_telemetry_overview.py
 Required acceptance checks:
 
 1. the legacy generator and `pmt-avc01-redfish` dashboard are unchanged;
-2. the new dashboard has 8 rows, 29 content panels and 5 simplified filters;
-3. default collection path is `redfish`, with `local` selectable;
-4. all generated PromQL targets parse successfully against current Prometheus;
-5. empty FIVR locator is valid when all slots are zero;
-6. an empty QAT average-latency target is valid when QAT has no traffic; raw
+2. Redfish and Local Overviews each have 7 rows and 25 content panels;
+3. each Overview has only the endpoint filter and a fixed collection path;
+4. header links switch between the two UIDs while preserving endpoint and time;
+5. all 64 fixed-path PromQL targets parse successfully against Prometheus;
+6. empty FIVR locator is valid when all slots are zero;
+7. an empty QAT average-latency target is valid when QAT has no traffic; raw
    activity counters should still remain discoverable;
-7. generated JSON is loaded under UID `pmt-gnr-telemetry-overview`;
-8. no panel labels raw values as `%`, `W`, `J` or `GB/s` without evidence;
-9. temperature has no artificial warning/fault color threshold;
+8. generated JSON is loaded under UIDs `pmt-gnr-redfish-overview`,
+   `pmt-gnr-local-overview` and `pmt-gnr-metric-explorer`;
+9. no panel labels raw values as `%`, `W`, `J` or `GB/s` without evidence;
 10. the Open Semantics Register is updated when a codebook or conversion is
     resolved.
 

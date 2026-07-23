@@ -18,7 +18,7 @@ avc01 已同时运行两条严格 XML 驱动的生产链路：
 | FIVR series | 642 | 642 |
 | 采集周期 | 20 秒 | 20 秒 |
 
-合并后 catalog 为 5,285 个名称、65,420 条当前 series。逐指标名称、HELP、类型、单位、标签和两种来源的 series 数量见 `docs/pmt-metrics-catalog.csv`。
+合并后 catalog 为 5,285 个名称、65,420 条当前 series。逐指标名称、HELP、类型、单位、单位来源、标签和两种来源的 series 数量见 `docs/pmt-metrics-catalog.csv`；人读分类和单位解释见 `docs/pmt-metrics-summary.md`。
 
 ## 2. 总体架构
 
@@ -35,6 +35,30 @@ Prometheus jobs：
 - `otel-pmt-inband`：avc01 OS 上的 local Collector，`10.239.89.3:8889`。
 
 Grafana dashboard 使用 `CollectionMode` 变量选择 `redfish`、`local` 或两者，并使用公共标签 `PMTEndpoint`、`DeviceId`、`AccessId`、`PMTGuid` 过滤数据。
+
+### 2.1 当前 CPU 和 Aggregator 拓扑
+
+目标 OS 的 `lscpu` 与 BMC Redfish 已交叉确认：
+
+- 2-socket Intel Granite Rapids Xeon engineering sample，QDF `Q4G7`；
+- 每 socket 96 physical cores、192 threads；
+- 整机 192 physical cores、384 logical CPUs；
+- 6 个 NUMA nodes；
+- 两种采集来源各发现 36 个 aggregator。
+
+36 个 aggregator 不是 36 个 CPU，也不是 36 个温度传感器，而是 36 块按数据域组织的 telemetry region：
+
+| 数据域 | GUID | Size | 实例数 | 主要采集内容 |
+|---|---|---:|---:|---|
+| OOBMSM CORE | `0x22473996` | 14496 | 6 | Core 温度、usage、三个 residency histogram、throttle、data loss |
+| PUNIT C-Die | `0x22806802` | 6784 | 6 | C-state、energy/policy、FIVR |
+| OOBMSM RMID | `0x477e9373` | 6160 | 6 | CHA/RMID RDT MBM 和 CMT |
+| TOPO Leaf | `0x3d4bb41a` | 24 | 8 | MCTP、Domain、UPI、socket topology |
+| TOPO Root | `0x3d4bb40a` | 48 | 2 | CHA enable 等 root topology |
+| PUNIT IO-Die | `0x22491753` | 6272 | 4 | IO PUNIT、socket EPB、FIVR availability |
+| OOBMSM QAT | `0x6e94ffa0` | 176 | 4 | QAT PCIe 累计 MB 和 latency |
+
+7 组实例相加为 36。完整 36 行 `DeviceId/AccessId/SourceId/GUID` 对照、Core 局部编号、Local/Redfish 对应边界见 `docs/pmt-platform-topology.md`。
 
 ## 3. XML 和严格匹配原则
 
@@ -98,10 +122,10 @@ receiver 保留原有来源专用标签，同时为两种模式提供公共标�
 | `PMTEndpoint` | 平台名，当前为 `avc01` |
 | `PMTGuid` | aggregator GUID |
 | `PMTSizeBytes` | telemetry region 字节数 |
-| `DeviceId` | BMC device ID；带内为 hostname |
-| `AccessId` | BMC access ID；带内为 `telemX` |
+| `DeviceId` | Redfish 为 BMC CPU ID 0/1；带内为 hostname |
+| `AccessId` | Redfish 为 MCTP telemetry access；带内为 `telemX`，不是传感器物理坐标 |
 
-因此同一指标可按 `CollectionMode` 对比 BMC 与 OS 数据，而不会混淆来源。
+因此同一指标可按 `CollectionMode` 对比 BMC 与 OS 数据，而不会混淆来源。Dashboard 中 `Core17 · D0/A27` 表示“Device 0、Access 27 aggregator 中的局部 Core17 字段”；它不能直接等同于 Linux global CPU 17。完整标签解释见 `docs/pmt-platform-topology.md`。
 
 ## 7. FIVR 特殊处理和语义边界
 
@@ -114,27 +138,52 @@ FIVR 是全指标中的一部分。receiver 对每个有效 64-bit FIVR monitor 
 
 `0xDEADBEEF` 和 `0xDEADBEEFDEADBEEF` 是 firmware poison/data-unavailable。遇到 poison 时只输出 `.available=0`，不输出 raw/status，绝不能解释为硬件故障。
 
-XML 只定义“2 bits per FIVR”，没有给出 0/1/2/3 的权威枚举，因此 dashboard 只显示原始两位码和 non-zero count，不擅自命名健康级别。全部偏移、实现和验证见 `docs/gnr-fivr-health-collection-workflow.md`。
+XML 只定义“2 bits per FIVR”，没有给出 0/1/2/3 的权威枚举。Dashboard 当前采用明确的运营展示约定：C-Die 的 packed words 和全部两位码均为 0、且数据可用时显示 `Healthy`，任一两位码非零时显示 `Unhealthy`；IO-Die 保留显示 `DEADBEEF`，不解释为硬件故障。独立 FIVR 诊断区会在出现非零码时列出 C-Die instance、monitor、slot、code 和采集来源，但不能把 slot 翻译为具体 rail/core。`Healthy`/`Unhealthy` 是项目运营约定，不是 XML 官方枚举。全部偏移、实现和验证见 `docs/gnr-fivr-health-collection-workflow.md`。
 
 ## 8. Prometheus、Grafana 和 catalog
 
-Prometheus 配置位于 `/etc/prometheus/prometheus.yml`。Grafana dashboard 的唯一可维护源是：
+Prometheus 配置位于 `/etc/prometheus/prometheus.yml`。Grafana dashboard 有两个独立可维护源：
 
 ```text
-tools/otel/generate_pmt_dashboard.py
+tools/otel/generate_pmt_dashboard.py                  # 保留的8栏技术演示版 + Explorer
+tools/otel/generate_gnr_telemetry_overview.py         # 新版内部GNR架构化Overview
 ```
 
-它生成：
+前者生成：
 
 - `tools/otel/dashboards/pmt-redfish-comprehensive.json`
+- `tools/otel/dashboards/pmt-metric-explorer.json`
 - `/var/lib/grafana/dashboards/pmt-backend-test/pmt-real-redfish.json`
+- `/var/lib/grafana/dashboards/pmt-backend-test/pmt-metric-explorer.json`
 
-不要直接维护 provisioned JSON。dashboard 现有 8 个 row、53 个 panel，并支持 `Collection mode` 来源筛选和全部 metric 探索。
+不要直接维护 provisioned JSON。客户演示dashboard现有8个row、34个dashboard entries（26个可视化panel和8个row header）、29个PromQL targets。默认使用`redfish`，避免把BMC与local重复聚合；需要交叉验证时再选择两种来源。01总览只回答三个客户问题：PMT Demo是否Ready、当前最高Core温度、C-Die FIVR monitor是否Healthy，并给出一张CPU温度趋势；data loss不再作为首页状态或趋势展示。
+
+第05栏Frequency/Temperature/Voltage residency使用顶部`05 Residency window`选择2m、5m、10m、15m、30m或1h窗口。第07栏保留技术诊断：data-loss历史累计值、最近15分钟新增量和内部timestamp；只有多个PMT更新窗口持续增长，或workload结束后仍增长，才需要升级调查。Grafana原生dashboard variable不能嵌入row，因此主页面移除全局metric搜索框，第08栏链接到独立`Intel PMT · Advanced Metric Explorer`。Explorer有1个row、5个entries（4个可视化panel）、4个PromQL targets，搜索框与结果紧邻。
+
+新版内部 `Intel PMT · GNR Redfish/Local Overview · Internal` 使用两个独立UID
+`pmt-gnr-redfish-overview`和`pmt-gnr-local-overview`，不会覆盖上述8栏Dashboard。它生成：
+
+- `tools/otel/dashboards/pmt-gnr-redfish-overview.json`
+- `tools/otel/dashboards/pmt-gnr-local-overview.json`
+- `tools/otel/dashboards/pmt-gnr-metric-explorer.json`
+- `/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-redfish-overview.json`
+- `/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-local-overview.json`
+- `/var/lib/grafana/dashboards/pmt-backend-test/pmt-gnr-metric-explorer.json`
+
+新版按采集路径拆成Redfish与Local两个Overview，每个共7个row、25个内容panel和
+32个PromQL targets，顶部仅保留全局有效的endpoint。两个Dashboard通过Header链接
+互相切换，并保留时间范围。Analysis固定为各Panel明确标注的5分钟窗口，
+不再伪装成全局变量。它只显示可证明单位，未知缩放统一标为Raw，
+并通过独立Explorer访问全部5,285个metric names。内部双语阅读说明、每个panel的含义、
+单位和Open Semantics Register见`docs/gnr-telemetry-dashboard-guide.md`。
 
 Catalog 生成器 `tools/otel/export_pmt_metric_catalog.py` 同时读取两个 exporter。输出：
 
 - `docs/pmt-metrics-summary.md`
+- `docs/pmt-metric-family-reference.md`
 - `docs/pmt-metrics-catalog.csv`
+
+Family reference 当前把全部 5,285 个名称归入38个经人工审核的family，逐family说明含义、数值语义、推荐查询、正常/异常边界和代表性HELP；其中data loss明确区分CPU内部processing cycle、20秒Collector读取和Prometheus scrape。完整 CSV 的每个准确 metric name 都增加 `family_id`、`family_title`、`value_semantics`、`recommended_query` 和 `caveat`，同时保留HELP、Prometheus type、单位、`unit_source`、series数量和labels。Prometheus metadata 当前没有PMT unit；可从标准OpenTelemetry名称后缀推断的单位标记为 `metric_name_suffix`，其余明确标记 `unspecified`，不能根据名称自行猜测。当前5,285个名称中2,990个可从后缀推断，2,295个尚无可靠单位，未归类名称为0。
 
 BMC 单次数据快照由 `tools/otel/export_pmt_bmc_snapshot.py` 对
 `http://localhost:8889/metrics` 执行一次 scrape，并输出
@@ -152,12 +201,16 @@ HELP、完整 labels 和单位提示。由于 Prometheus metadata 当前不提�
 
 ```text
 http://localhost:3000/d/pmt-avc01-redfish
+http://localhost:3000/d/pmt-gnr-redfish-overview
+http://localhost:3000/d/pmt-gnr-local-overview
 ```
 
 公司内网正式分享入口已经部署在 `failure-telemetry-vm1`（`10.112.227.52`）：
 
 ```text
 http://10.112.227.52/d/pmt-avc01-redfish
+http://10.112.227.52/d/pmt-gnr-redfish-overview
+http://10.112.227.52/d/pmt-gnr-local-overview
 ```
 
 观看者只需浏览器，无需 VS Code、SSH、Grafana 登录或开发服务器账号。数据路径为：浏览器 → Demo VM nginx:80 → Demo VM `127.0.0.1:13000` → persistent reverse SSH tunnel → Collector VM Grafana `127.0.0.1:3000`。
@@ -218,12 +271,13 @@ count({PMTEndpoint="avc01",CollectionMode="local"})
 
 1. `docs/README.md`：文档导航、角色路线、优先级和冲突处理；
 2. **本文**：当前真实架构、状态、分享、验证与回滚；
-3. `docs/pmt-metrics-summary.md`：先了解指标规模与分类；
-4. `docs/pmt-telemetry-backend-reproduction.md` 的原理章节：理解 PMT、XML、OTel、Prometheus 和 Grafana；
-5. `docs/gnr-fivr-health-collection-workflow.md`：FIVR 精确 XML、poison 和交叉验证细节；
-6. `docs/pmt-telemetry-backend-reproduction.md` 的部署与排障章节：从零复现和日常运维；
-7. `docs/pmt-metrics-catalog.csv`：开发查询和 panel 时按需检索，不需要顺序通读；
-8. 配置、receiver、dashboard/catalog 生成器和 systemd 源文件：修改实现时再读；
-9. `docs/getting-started.md`、`docs/use-cases.md`、`docs/FAQ.md`：上游通用背景，不能覆盖本文的 avc01 生产事实。
+3. `docs/pmt-platform-topology.md`：理解 CPU/Core、36 个 aggregator、标签和采集数据域；
+4. `docs/pmt-metrics-summary.md`：理解指标规模、分类、类型、单位和代表性指标族；
+5. `docs/pmt-telemetry-backend-reproduction.md` 的原理章节：理解 PMT、XML、OTel、Prometheus 和 Grafana；
+6. `docs/gnr-fivr-health-collection-workflow.md`：FIVR 精确 XML、poison 和交叉验证细节；
+7. `docs/pmt-telemetry-backend-reproduction.md` 的部署与排障章节：从零复现和日常运维；
+8. `docs/pmt-metrics-catalog.csv`：开发查询和 panel 时按需检索，不需要顺序通读；
+9. 配置、receiver、dashboard/catalog 生成器和 systemd 源文件：修改实现时再读；
+10. `docs/getting-started.md`、`docs/use-cases.md`、`docs/FAQ.md`：上游通用背景，不能覆盖本文的 avc01 生产事实。
 
 如果文档中的 URL、metric 数、panel 数或采集模式互相冲突，以本文、当前运行配置/API 实测及自动生成 catalog 为准。
