@@ -1,0 +1,475 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(255, 96, 96, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Intel-internal full PMT metric search paired with the GNR Telemetry Overview.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "arrow-left",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Back to GNR Overview",
+      "tooltip": "Return to the architecture-based GNR telemetry overview",
+      "type": "link",
+      "url": "/d/pmt-gnr-telemetry-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "doc",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": true,
+      "title": "Bilingual Dashboard Guide",
+      "tooltip": "Metric semantics, units and unresolved items",
+      "type": "link",
+      "url": "https://github.com/Jacky-code535/PMT/blob/pmt-redfish-dashboard/docs/gnr-telemetry-dashboard-guide.md"
+    }
+  ],
+  "liveNow": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Metric Search Results",
+      "description": "Search all current PMT names. Interpret each result with its catalog type, unit and family guidance.",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "How to Use",
+      "description": "",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "content": "Select **Metric** at the top. Use **Raw History** for current gauges and historical counters. In **Five-Minute Change**, read only the calculation that matches the metric type. Raw and No Data are not interchangeable.",
+        "mode": "markdown"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "$metric · Raw History",
+      "description": "Raw history for the selected metric. Counter absolute values normally do not represent current intensity.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 0,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "width": 340
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "{{CollectionMode}} · Socket {{DeviceId}} · A{{AccessId}}/S{{SourceId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "table",
+      "title": "$metric · Current Series",
+      "description": "Current values with complete source labels.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "targets": [
+        {
+          "expr": "{__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}",
+          "legendFormat": "",
+          "refId": "A",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "$metric · Five-Minute Change",
+      "description": "Counter rate and gauge delta are both shown for technical inspection; only one normally matches the selected family semantics.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "gradientMode": "opacity",
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            },
+            "axisPlacement": "auto",
+            "axisLabel": "",
+            "scaleDistribution": {
+              "type": "linear"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "width": 340
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])",
+          "legendFormat": "Counter rate/s · Socket {{DeviceId}} · A{{AccessId}}",
+          "refId": "A"
+        },
+        {
+          "expr": "delta({__name__=\"$metric\",PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"}[5m])/300",
+          "legendFormat": "Gauge delta/s · Socket {{DeviceId}} · A{{AccessId}}",
+          "refId": "B"
+        }
+      ]
+    }
+  ],
+  "refresh": "20s",
+  "schemaVersion": 41,
+  "tags": [
+    "Intel Internal",
+    "GNR",
+    "Intel PMT",
+    "metric explorer"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "endpoint",
+        "label": "Platform endpoint",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=~\".+\"},PMTEndpoint)",
+          "refId": "PrometheusVariableQueryEditor-Endpoint"
+        },
+        "definition": "label_values({PMTEndpoint=~\".+\"},PMTEndpoint)",
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "avc01",
+          "value": "avc01"
+        }
+      },
+      {
+        "name": "path",
+        "label": "Collection path",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
+          "refId": "PrometheusVariableQueryEditor-Path"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\"},CollectionMode)",
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "redfish",
+          "value": "redfish"
+        }
+      },
+      {
+        "name": "socket",
+        "label": "Socket",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\"},DeviceId)",
+          "refId": "PrometheusVariableQueryEditor-Socket"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\"},DeviceId)",
+        "refresh": 1,
+        "sort": 3,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "access",
+        "label": "Access",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\"},AccessId)",
+          "refId": "PrometheusVariableQueryEditor-Access"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\"},AccessId)",
+        "refresh": 1,
+        "sort": 3,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "die",
+        "label": "PMT GUID / Die",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\"},PMTGuid)",
+          "refId": "PrometheusVariableQueryEditor-Die"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\"},PMTGuid)",
+        "refresh": 1,
+        "sort": 1,
+        "includeAll": true,
+        "allValue": ".*",
+        "multi": true,
+        "current": {
+          "selected": true,
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        }
+      },
+      {
+        "name": "metric",
+        "label": "Metric",
+        "type": "query",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "query": {
+          "query": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
+          "refId": "PrometheusVariableQueryEditor-Metric"
+        },
+        "definition": "label_values({PMTEndpoint=\"$endpoint\",CollectionMode=\"$path\",DeviceId=~\"$socket\",AccessId=~\"$access\",PMTGuid=~\"$die\"},__name__)",
+        "refresh": 1,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "c0_c1_c2_c3_temp_c0_temp_celsius",
+          "value": "c0_c1_c2_c3_temp_c0_temp_celsius"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "20s",
+      "30s",
+      "1m",
+      "5m"
+    ],
+    "time_options": [
+      "15m",
+      "30m",
+      "1h",
+      "6h",
+      "12h",
+      "24h",
+      "7d"
+    ]
+  },
+  "timezone": "browser",
+  "title": "Intel PMT · GNR Metric Explorer · Internal",
+  "uid": "pmt-gnr-metric-explorer",
+  "version": 1
+}
