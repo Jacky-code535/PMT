@@ -2,20 +2,14 @@
 
 > **Intel Internal Only**
 >
-> Status: Current implementation baseline  
-> Audience: Product owners, engineering managers, platform engineers, dashboard
-> developers, validation engineers, and operations teams
+> Status: Current implementation baseline
 
 ## 1. Purpose
 
-This document defines the product behavior of the implemented Intel Platform
-Monitoring Technology (PMT) telemetry platform. It describes what the platform
-collects, stores, and presents; how users navigate and interpret the current
+This document defines the product behavior of the implemented Intel Platform  
+Monitoring Technology (PMT) telemetry platform. It describes what the platform  
+collects, stores, and presents; how users navigate and interpret the current  
 dashboards; and how completion is verified.
-
-This PRD is intentionally limited to the current PMT implementation. It does not
-define a generic telemetry onboarding product, a relational metadata service, or
-automatic support for arbitrary data sources.
 
 ## 2. Product Summary
 
@@ -37,9 +31,7 @@ Two independent collection paths are supported:
 2. **In-band / Local** reads Linux `intel_pmt` sysfs telemetry devices.
 
 Both paths use the same metric naming and provenance model where the underlying
-schema permits it. They remain separate views because their instance locators
-are different and no authoritative physical OOB-to-Local instance mapping is
-currently available.
+schema permits it. 
 
 ## 3. Product Goals
 
@@ -576,8 +568,4 @@ Possible future work, not committed by this PRD, includes:
 - a relational metadata store;
 - controlled onboarding and preview of new platform schemas;
 - customer-specific dashboards built from approved semantic definitions.
-
-
-
-
 
